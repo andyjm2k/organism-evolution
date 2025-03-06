@@ -1,0 +1,21 @@
+{
+    "petridish_size": 1000,
+    "episode_length": 2000,
+    "environment_width": 1000,
+    "environment_height": 1000,
+    "screen_width": 1000,
+    "screen_height": 1000,
+    "num_generations": 2000,
+    "num_food_items": 75,
+    "simulation_steps": 2000,
+    "detection_radius": 200,
+    "food_detection_radius": 300,
+    "threat_detection_radius": 100,
+    "breeding_detection_radius": 150,
+    "starting_energy": 150,
+    "food_energy_value": 40,
+    "movement_cost": 0.05,
+    "boundary_penalty": 0.5,
+    "screen": null,
+    "render": true
+}

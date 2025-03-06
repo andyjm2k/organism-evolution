@@ -1,0 +1,3 @@
+neat-python
+pygame
+psutil>=5.9.0

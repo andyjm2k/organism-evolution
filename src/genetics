@@ -1,0 +1,2 @@
+# This module will handle genetic operations, but for now, it's integrated with NEAT
+# NEAT handles most of the genetic operations internally
