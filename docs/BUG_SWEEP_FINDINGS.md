@@ -24,11 +24,14 @@ Executed per `docs/BUG_SWEEP_PLAN.md` on branch `cursor/execute-refactor-review-
 - Breeding: episode-local children only
 - Config economy: starting energy, food value, movement cost wired
 
-## Remaining P3 (deferred)
+## P3 hygiene (completed)
 
-- `scoreboard.py` / `renderer.py` still >500 LOC (functional split optional)
-- `test_genetics.py` placeholder (no genetics module)
-- README still references 18 NEAT inputs (should say 22)
+| ID | Item | Resolution |
+|---|---|---|
+| SW-10 | `scoreboard.py` / `renderer.py` >500 LOC | Already under limit (269 / 323 LOC); no split required |
+| SW-11 | `test_genetics.py` placeholder | Replaced with `tests/test_breeding.py` (episode-local NEAT crossover) |
+| SW-12 | README outdated (18 inputs) | README refreshed: 22-input schema, CLI flags, testing, layout |
+| SW-13 | Legacy config alias coverage | Added `test_legacy_config_aliases_are_honored` in `test_simulation.py` |
 
 ## Test coverage after sweep
 
@@ -36,4 +39,4 @@ Executed per `docs/BUG_SWEEP_PLAN.md` on branch `cursor/execute-refactor-review-
 python3 -m unittest discover -s tests -v
 ```
 
-21 tests: distance, network inputs, organism, simulation, spatial, scoreboard.
+25 tests: distance, network inputs, organism, breeding, simulation, spatial, scoreboard.

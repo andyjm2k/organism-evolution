@@ -52,6 +52,34 @@ class TestSimulation(unittest.TestCase):
             self.assertIsNotNone(genome.fitness)
             self.assertIsInstance(genome.fitness, (int, float))
 
+    def test_legacy_config_aliases_are_honored(self):
+        """Legacy petridish_size and episode_length keys map to modern fields."""
+        # Load NEAT config from the project config directory.
+        root = Path(__file__).resolve().parents[1]
+        neat_config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            str(root / "config" / "neat-config.ini"),
+        )
+        # Use legacy keys only (no simulation_steps / environment_width).
+        sim_config = {
+            "petridish_size": 500,
+            "episode_length": 100,
+            "num_food_items": 5,
+            "detection_radius": 80,
+            "num_generations": 1,
+            "render": False,
+            "logging_level": "normal",
+        }
+        simulation = Simulation(neat_config, sim_config)
+        # episode_length should populate simulation_steps.
+        self.assertEqual(simulation.simulation_steps, 100)
+        # petridish_size should populate environment width/height.
+        self.assertEqual(simulation.environment_config["width"], 500)
+        self.assertEqual(simulation.environment_config["height"], 500)
+
 
 if __name__ == "__main__":
     unittest.main()
