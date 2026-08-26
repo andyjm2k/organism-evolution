@@ -103,6 +103,15 @@ class TestOrganism(unittest.TestCase):
         organism.update([], [organism])
         self.assertEqual(organism.steps_taken, before + 1)
 
+    def test_reset_clears_highest_fitness(self):
+        # Peak fitness must not leak across episode trials.
+        organism = _make_organism()
+        organism.steps_taken = 10
+        organism.calculate_fitness()
+        self.assertGreater(organism.highest_fitness, 0.0)
+        organism.reset(organism.environment_config)
+        self.assertEqual(organism.highest_fitness, 0.0)
+
     def test_fitness_includes_bonus(self):
         # Explicit fitness bonuses must affect the selection signal.
         organism = _make_organism()

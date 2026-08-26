@@ -479,6 +479,7 @@ class Organism:
         self.organisms_consumed = 0
         self.was_moving = False
         self.fitness_bonus = 0.0
+        self.highest_fitness = 0.0
         self.steps_since_breeding = 1000
         self.steps_since_last_food = 0
         self.steps_since_last_hunt = 0

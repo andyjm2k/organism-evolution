@@ -42,7 +42,7 @@ This project simulates the genetic evolution of simple cell organisms using the 
 
 ## Configuration
 
-- `config/neat-config.ini`: NEAT algorithm settings
+- `config/neat-config.ini`: NEAT algorithm settings (22 network inputs, 8 outputs)
 - `config/simulation-config.json`: Simulation parameters
 
 ## License

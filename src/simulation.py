@@ -11,6 +11,7 @@ from food import Food
 from logging_util import log_always, log_detailed
 from organism import Organism
 from scoreboard import Scoreboard
+from spatial import SpatialGrid
 
 
 class Simulation:
@@ -27,6 +28,15 @@ class Simulation:
             self.sim_config = sim_config
         # Verbosity gate for hot-path logging.
         self.logging_level = self.sim_config.get("logging_level", "normal")
+        self.dashboard_level = self.sim_config.get("dashboard_level", "normal")
+        Scoreboard.set_dashboard_level(self.dashboard_level)
+        # Honor legacy config aliases when present.
+        if "episode_length" in self.sim_config and "simulation_steps" not in self.sim_config:
+            self.sim_config["simulation_steps"] = self.sim_config["episode_length"]
+        if "petridish_size" in self.sim_config:
+            size = self.sim_config["petridish_size"]
+            self.sim_config.setdefault("environment_width", size)
+            self.sim_config.setdefault("environment_height", size)
         # Sensible default when food count is omitted.
         if "num_food_items" not in self.sim_config:
             self.sim_config["num_food_items"] = 30
@@ -42,7 +52,9 @@ class Simulation:
                 self.sim_config["environment_width"],
                 self.sim_config["environment_height"],
             )
-            self.renderer = Renderer(screen_size)
+            self.renderer = Renderer(
+                screen_size, logging_level=self.logging_level
+            )
         # Shared environment contract consumed by organisms.
         detection = self.sim_config["detection_radius"]
         self.environment_config = {
@@ -82,6 +94,8 @@ class Simulation:
         self._episode_children = []
         # Stats captured before organism cleanup.
         self._last_generation_stats = None
+        # Spatial index cell size ~ half the general detection radius.
+        self._grid_cell_size = max(50, self.sim_config["detection_radius"] // 2)
 
     def spawn_food(self):
         """Clear and respawn food across the arena."""
@@ -97,6 +111,35 @@ class Simulation:
             self.food_items.append(
                 Food(x, y, log_creation=self.logging_level == "detailed")
             )
+
+    def _nearby_entities(self, organism, organisms, food_grid, org_grid):
+        """Return food, peers, threats, and partners from prebuilt grids."""
+        nearby_food = list(
+            food_grid.query(organism.position, self.food_detection_radius)
+        )
+        nearby_organisms = list(
+            org_grid.query(organism.position, self.detection_radius)
+        )
+        nearby_threats = []
+        nearby_partners = []
+        for other in nearby_organisms:
+            if other is organism:
+                continue
+            if other.is_carnivore and not organism.is_carnivore:
+                if within_radius(
+                    organism.position,
+                    other.position,
+                    self.threat_detection_radius,
+                ):
+                    nearby_threats.append(other)
+            elif other.species_id == organism.species_id:
+                if within_radius(
+                    organism.position,
+                    other.position,
+                    self.breeding_detection_radius,
+                ):
+                    nearby_partners.append(other)
+        return nearby_food, nearby_organisms, nearby_threats, nearby_partners
 
     def register_episode_child(self, child):
         """Queue an episode-local child without mutating the NEAT population."""
@@ -144,47 +187,24 @@ class Simulation:
                             return
                         if event.type == pygame.MOUSEBUTTONDOWN and self.renderer:
                             self.handle_click(event.pos, organisms)
+                food_grid = SpatialGrid(self._grid_cell_size)
+                org_grid = SpatialGrid(self._grid_cell_size)
+                for food in self.food_items:
+                    if food.position is not None:
+                        food_grid.insert(food, food.position)
+                for other in organisms:
+                    if other.position is not None and other.energy > 0:
+                        org_grid.insert(other, other.position)
                 for organism in organisms[:]:
                     if organism.energy <= 0:
                         if organism in organisms:
                             organisms.remove(organism)
                         continue
-                    nearby_food = [
-                        food
-                        for food in self.food_items
-                        if food.position is not None
-                        and within_radius(
-                            organism.position,
-                            food.position,
-                            self.food_detection_radius,
+                    nearby_food, nearby_organisms, nearby_threats, nearby_partners = (
+                        self._nearby_entities(
+                            organism, organisms, food_grid, org_grid
                         )
-                    ]
-                    nearby_organisms = []
-                    nearby_threats = []
-                    nearby_partners = []
-                    for other in organisms:
-                        if other is organism:
-                            continue
-                        if other.is_carnivore and not organism.is_carnivore:
-                            if within_radius(
-                                organism.position,
-                                other.position,
-                                self.threat_detection_radius,
-                            ):
-                                nearby_threats.append(other)
-                        elif other.species_id == organism.species_id:
-                            if within_radius(
-                                organism.position,
-                                other.position,
-                                self.breeding_detection_radius,
-                            ):
-                                nearby_partners.append(other)
-                        if within_radius(
-                            organism.position,
-                            other.position,
-                            self.detection_radius,
-                        ):
-                            nearby_organisms.append(other)
+                    )
                     organism.take_action(
                         nearby_food,
                         nearby_organisms,
@@ -347,7 +367,9 @@ class Simulation:
             log_always(f"Generation {gen} complete")
             log_always(f"Number of genomes with positive fitness: {positive}")
             if self._last_generation_stats:
-                Scoreboard.display_terminal_dashboard(gen)
+                Scoreboard.display_terminal_dashboard(
+                    gen, dashboard_level=self.dashboard_level
+                )
             else:
                 log_always("Warning: No organisms survived this generation")
             if pygame.display.get_init():

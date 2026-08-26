@@ -62,7 +62,7 @@ def run_simulation(render=True, logging_level="normal", dashboard_level="normal"
     )
 
     # Reset scoreboard state for a fresh run.
-    Scoreboard.initialize()
+    Scoreboard.initialize(dashboard_level=dashboard_level)
     simulation = Simulation(neat_config, sim_config)
 
     try:
