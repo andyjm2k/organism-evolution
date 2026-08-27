@@ -31,6 +31,18 @@ class TestSpatialGrid(unittest.TestCase):
         grid.insert(missing, missing.position)
         self.assertEqual(list(grid.query((0, 0), 100)), [])
 
+    def test_clear_allows_grid_reuse(self):
+        # clear() must drop prior inserts so the same instance can be reused.
+        grid = SpatialGrid(cell_size=50)
+        entity = SimpleNamespace(position=(10, 0))
+        grid.insert(entity, entity.position)
+        self.assertEqual(list(grid.query((0, 0), 50)), [entity])
+        grid.clear()
+        self.assertEqual(list(grid.query((0, 0), 50)), [])
+        # Re-insert after clear should work on the same grid object.
+        grid.insert(entity, entity.position)
+        self.assertEqual(list(grid.query((0, 0), 50)), [entity])
+
 
 if __name__ == "__main__":
     unittest.main()

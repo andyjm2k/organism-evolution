@@ -70,6 +70,22 @@ class TestNetworkInputs(unittest.TestCase):
         # Empty food sentinel is [0, 1, 0, 0].
         self.assertEqual(inputs[9:13], [0.0, 1.0, 0.0, 0.0])
 
+    def test_closest_entity_prefers_nearer_candidate(self):
+        # Squared-distance path must still pick the nearer of two entities.
+        from network_inputs import _closest_entity
+
+        herbivore = _make_organism(False)
+        near = SimpleNamespace(position=(120.0, 100.0))
+        far = SimpleNamespace(position=(250.0, 100.0))
+        count, dist_norm, dx_norm, _dy = _closest_entity(
+            herbivore, [far, near], 300
+        )
+        self.assertGreater(count, 0.0)
+        # Nearer entity is 20 units away → lower normalized distance.
+        self.assertLess(dist_norm, 250.0 / 300.0)
+        # Direction should point toward the nearer (+x) candidate.
+        self.assertGreater(dx_norm, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

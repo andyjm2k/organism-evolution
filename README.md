@@ -31,7 +31,7 @@ This project simulates the genetic evolution of simple cell organisms using the 
 
 ## Running Options
 
-CLI flags use `key=value` syntax:
+CLI flags use `key=value` syntax and override `config/simulation-config.json`:
 
 | Flag | Values | Description |
 |------|--------|-------------|
@@ -39,13 +39,15 @@ CLI flags use `key=value` syntax:
 | `logging=` | `normal` / `detailed` | Console log verbosity during evaluation |
 | `dashboard=` | `minimal` / `normal` / `detailed` | Terminal scoreboard detail level |
 
-Examples:
+**Default training mode is headless** (`"render": false` in JSON) for maximum throughput. Enable visuals explicitly:
 
 ```bash
 python src/main.py render=true
 python src/main.py render=false dashboard=minimal
-python src/main.py render=false logging=detailed dashboard=detailed
+python src/main.py logging=detailed dashboard=detailed
 ```
+
+When rendering, `render_stride` in JSON controls how often frames are drawn (default `10` = every 10th sim step), so observation does not force a draw on every physics tick.
 
 - **With Rendering**: The simulation displays organisms and food in the environment, plus an in-window scoreboard of top species.
 - **Without Rendering (Headless Mode)**: Runs without visual output and prints a terminal dashboard after each generation. Useful for faster runs or servers without a display.

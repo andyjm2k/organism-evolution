@@ -15,9 +15,12 @@ class SpatialGrid:
         self.cell_size = max(1, int(cell_size))
         # Map (cx, cy) cell keys to entity lists.
         self._cells = defaultdict(list)
+        # Reusable dedupe buffer so query() avoids allocating a new set (A-8).
+        self._seen = set()
 
     def clear(self):
-        """Remove all indexed entities."""
+        """Remove all indexed entities for grid reuse across steps."""
+        # Drop cell membership without allocating a new defaultdict.
         self._cells.clear()
 
     def _cell(self, position):
@@ -41,7 +44,9 @@ class SpatialGrid:
         # Number of cells to inspect in each direction.
         span = int(math.ceil(radius / self.cell_size)) + 1
         cx, cy = self._cell(position)
-        seen = set()
+        # Reuse the instance seen-set instead of allocating each query.
+        seen = self._seen
+        seen.clear()
         for dx in range(-span, span + 1):
             for dy in range(-span, span + 1):
                 for entity in self._cells.get((cx + dx, cy + dy), ()):

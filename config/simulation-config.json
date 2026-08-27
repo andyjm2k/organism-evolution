@@ -8,6 +8,7 @@
     "num_generations": 2000,
     "num_food_items": 75,
     "simulation_steps": 2000,
+    "num_trials": 3,
     "detection_radius": 200,
     "food_detection_radius": 300,
     "threat_detection_radius": 100,
@@ -17,5 +18,8 @@
     "movement_cost": 0.05,
     "boundary_penalty": 0.5,
     "screen": null,
-    "render": true
+    "render": false,
+    "render_stride": 10,
+    "logging_level": "normal",
+    "dashboard_level": "normal"
 }

@@ -80,6 +80,36 @@ class TestSimulation(unittest.TestCase):
         self.assertEqual(simulation.environment_config["width"], 500)
         self.assertEqual(simulation.environment_config["height"], 500)
 
+    def test_num_trials_and_render_stride_are_configurable(self):
+        """num_trials and render_stride read from config with safe defaults."""
+        # Load NEAT config from the project config directory.
+        root = Path(__file__).resolve().parents[1]
+        neat_config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            str(root / "config" / "neat-config.ini"),
+        )
+        sim_config = {
+            "environment_width": 200,
+            "environment_height": 200,
+            "num_food_items": 4,
+            "simulation_steps": 5,
+            "detection_radius": 80,
+            "num_generations": 1,
+            "num_trials": 2,
+            "render_stride": 5,
+            "render": False,
+            "logging_level": "normal",
+        }
+        simulation = Simulation(neat_config, sim_config)
+        self.assertEqual(simulation.num_trials, 2)
+        self.assertEqual(simulation.render_stride, 5)
+        # Reused spatial grids should exist after init (A-3).
+        self.assertIsNotNone(simulation._food_grid)
+        self.assertIsNotNone(simulation._org_grid)
+
 
 if __name__ == "__main__":
     unittest.main()

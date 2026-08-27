@@ -2,6 +2,8 @@
 
 import math
 
+from distance import squared_distance
+
 # Total input count must match config/neat-config.ini num_inputs.
 NUM_NETWORK_INPUTS = 22
 
@@ -19,36 +21,37 @@ def _closest_entity(organism, entities, radius):
     """Return (count_norm, dist_norm, dx_norm, dy_norm) for nearest entity."""
     # Track how many entities fall inside the sensing radius.
     count = 0
+    # Compare with squared radius to avoid per-candidate sqrt (A-5).
+    radius_sq = radius * radius if radius > 0 else 0.0
     # Start with "infinitely far" so any real candidate wins.
-    best_dist = float("inf")
+    best_dist_sq = float("inf")
     # Direction placeholders until a candidate is found.
     best_dx = 0.0
     best_dy = 0.0
-    # Scan all candidates using linear distance comparisons.
+    # Scan candidates using squared-distance comparisons.
     for entity in entities:
         # Skip entities without a usable world position.
         if entity.position is None or organism.position is None:
             continue
-        # Linear distance for sensing (not squared).
-        dist = math.sqrt(
-            (organism.position[0] - entity.position[0]) ** 2
-            + (organism.position[1] - entity.position[1]) ** 2
-        )
+        # Squared distance for radius tests (identical ordering to linear).
+        dist_sq = squared_distance(organism.position, entity.position)
         # Ignore anything outside the configured sensing radius.
-        if dist > radius:
+        if dist_sq > radius_sq:
             continue
         # Count every in-range entity toward local density.
         count += 1
         # Keep the nearest entity for directional cues.
-        if dist < best_dist:
-            best_dist = dist
+        if dist_sq < best_dist_sq:
+            best_dist_sq = dist_sq
             best_dx = entity.position[0] - organism.position[0]
             best_dy = entity.position[1] - organism.position[1]
     # No entity found → max distance, zero direction, zero density.
-    if best_dist == float("inf"):
+    if best_dist_sq == float("inf"):
         return 0.0, 1.0, 0.0, 0.0
     # Normalize density against a soft cap of ten neighbors.
     count_norm = min(1.0, count / 10.0)
+    # Take sqrt once for the winning distance channel.
+    best_dist = math.sqrt(best_dist_sq)
     # Clamp distance into [0, 1] using the sensing radius.
     dist_norm = min(1.0, best_dist / max(radius, 1.0))
     # Direction components scaled by the same radius.
