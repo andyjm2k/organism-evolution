@@ -365,3 +365,25 @@ Headless CI should not require GPU deps.
 **GPU role:** Graphics only in early phases. The NEAT loop stays on CPU until batch inference passes seeded parity tests. A ModernGL instanced-draw renderer is the recommended path for 500+ entities without changing simulation logic.
 
 **Explicit non-goals:** Reducing trials, steps, or population; changing fitness aggregation; removing RNG noise; altering collision resolution order.
+
+---
+
+## 10. Execution status
+
+| ID | Status | Notes |
+|----|--------|-------|
+| A-1 | Done | `simulation-config.json` defaults `"render": false`; CLI `render=true` for visuals |
+| A-2 | Done | `main.py` skips `pygame.init()` when headless |
+| A-3 | Done | Reused `_food_grid` / `_org_grid` with `.clear()` each step |
+| A-4 | Done | `organism.update(nearby_food, nearby_organisms)` uses spatial candidates |
+| A-5 | Done | `_closest_entity` uses `squared_distance`; one sqrt for winner |
+| A-6 | Done | Rebuild `next_organisms` list instead of `list.remove` |
+| A-7 | Partial | Nearby lists built once and reused for action + consumption |
+| A-8 | Done | `SpatialGrid._seen` reused across queries |
+| A-9 | Done | Renderer caches HUD surface keyed by food/gen/species counts |
+| A-10 | Done | Event pump only in `Simulation`; renderer no longer drains queue |
+| A-12 | Done | `num_trials` configurable (default 3) |
+| B-1 | Done | `render_stride` (default 10) draws every Nth step |
+| B-2 | Done | Arena organisms blit from cached `get_species_visual` surfaces |
+| B-3+ | Pending | ModernGL backend |
+| C-* | Pending | Batch NN after parity suite |

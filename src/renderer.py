@@ -82,14 +82,13 @@ class Renderer:
         return self.species_colors[species_id]
 
     def render(self, organisms, food_items):
-        """Draw one simulation frame; return False when the window closes."""
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return False
-
+        """Draw one simulation frame; events are pumped by Simulation (A-10)."""
+        # Clear the full window to the arena background color.
         self.screen.fill((255, 255, 255))
+        # Arena width excludes the right-hand scoreboard panel.
         main_width = self.screen.get_width() - self.scoreboard_width
         main_height = self.screen.get_height()
+        # Breeding safe-zone inset matches organism can_breed edge rules.
         breeding_boundary_x = main_width * 0.1
         breeding_boundary_y = main_height * 0.1
         breeding_width = main_width - (breeding_boundary_x * 2)
@@ -110,6 +109,7 @@ class Renderer:
             (breeding_boundary_x + 5, breeding_boundary_y - 25),
         )
 
+        # Cap draw calls for very large populations / food piles.
         render_limit = 500
         if food_items:
             render_food = food_items[:render_limit]
@@ -124,30 +124,42 @@ class Renderer:
                 if organism.position is not None and organism.energy > 0:
                     pos = (int(organism.position[0]), int(organism.position[1]))
                     species_id_str = str(organism.species_id)
-                    color = self.species_colors.get(species_id_str) or self.get_species_color(
-                        species_id_str, organism.is_carnivore
-                    )
-                    self.draw_organism_with_spikes(
-                        self.screen,
-                        pos,
-                        color,
+                    # Reuse scoreboard sprite cache for arena draws (B-2).
+                    visual = self.get_species_visual(
+                        species_id_str,
+                        organism.is_carnivore,
                         organism.get_radius(),
                         organism.num_spikes,
-                        organism.get_active_node_count(),
-                        organism.is_carnivore,
+                        organism.spike_length,
+                        num_nodes=organism.get_active_node_count(),
+                    )
+                    # Center the cached surface on the organism world position.
+                    self.screen.blit(
+                        visual,
+                        (
+                            pos[0] - visual.get_width() // 2,
+                            pos[1] - visual.get_height() // 2,
+                        ),
                     )
 
         if organisms:
+            # Cache HUD text until counts or generation change (A-9).
             species_count = len(set(org.species_id for org in organisms))
-            debug_text = (
-                f"Food: {len(food_items)} | Gen: {self.generation} | "
-                f"Species: {species_count}"
-            )
-            self.screen.blit(self.font.render(debug_text, True, (0, 0, 0)), (10, 10))
+            food_count = len(food_items) if food_items else 0
+            hud_key = (food_count, self.generation, species_count)
+            if getattr(self, "_hud_key", None) != hud_key:
+                debug_text = (
+                    f"Food: {food_count} | Gen: {self.generation} | "
+                    f"Species: {species_count}"
+                )
+                self._hud_surface = self.font.render(debug_text, True, (0, 0, 0))
+                self._hud_key = hud_key
+            self.screen.blit(self._hud_surface, (10, 10))
 
         self._render_scoreboard()
         pygame.display.flip()
         self.clock.tick(60)
+        # Always True; Simulation owns QUIT handling after event dedupe.
         return True
 
     def set_generation(self, generation):

@@ -96,6 +96,13 @@ class Simulation:
         self._last_generation_stats = None
         # Spatial index cell size ~ half the general detection radius.
         self._grid_cell_size = max(50, self.sim_config["detection_radius"] // 2)
+        # Reuse grids across steps to avoid per-step allocation (A-3).
+        self._food_grid = SpatialGrid(self._grid_cell_size)
+        self._org_grid = SpatialGrid(self._grid_cell_size)
+        # Trials per genome (default 3); configurable without changing semantics.
+        self.num_trials = int(self.sim_config.get("num_trials", 3))
+        # Draw every Nth step when rendering (B-1); 1 = every step.
+        self.render_stride = max(1, int(self.sim_config.get("render_stride", 1)))
 
     def spawn_food(self):
         """Clear and respawn food across the arena."""
@@ -165,9 +172,8 @@ class Simulation:
             )
             organism.simulation = self
             genome_to_organism[genome_id] = organism
-        num_trials = 3
         log_always(f"Starting evaluation with {len(genome_to_organism)} organisms")
-        for trial in range(num_trials):
+        for trial in range(self.num_trials):
             self.spawn_food()
             self._episode_children.clear()
             # Reset NEAT-owned organisms for the new trial.
@@ -187,18 +193,21 @@ class Simulation:
                             return
                         if event.type == pygame.MOUSEBUTTONDOWN and self.renderer:
                             self.handle_click(event.pos, organisms)
-                food_grid = SpatialGrid(self._grid_cell_size)
-                org_grid = SpatialGrid(self._grid_cell_size)
+                # Clear and refill reused grids (A-3) instead of reallocating.
+                food_grid = self._food_grid
+                org_grid = self._org_grid
+                food_grid.clear()
+                org_grid.clear()
                 for food in self.food_items:
                     if food.position is not None:
                         food_grid.insert(food, food.position)
                 for other in organisms:
                     if other.position is not None and other.energy > 0:
                         org_grid.insert(other, other.position)
-                for organism in organisms[:]:
+                # Rebuild alive list once per step (A-6) instead of list.remove.
+                next_organisms = []
+                for organism in organisms:
                     if organism.energy <= 0:
-                        if organism in organisms:
-                            organisms.remove(organism)
                         continue
                     nearby_food, nearby_organisms, nearby_threats, nearby_partners = (
                         self._nearby_entities(
@@ -211,7 +220,11 @@ class Simulation:
                         nearby_threats,
                         nearby_partners,
                     )
-                    organism.update(self.food_items, organisms)
+                    # Consume via spatially filtered candidates (A-4).
+                    organism.update(nearby_food, nearby_organisms)
+                    if organism.energy > 0:
+                        next_organisms.append(organism)
+                organisms = next_organisms
                 # Admit episode-local children into the live cast.
                 if self._episode_children:
                     organisms.extend(self._episode_children)
@@ -230,8 +243,11 @@ class Simulation:
                         f"Trial {trial + 1}, step {step}: {alive} alive, "
                         f"avg energy {avg_energy:.2f}",
                     )
-                if self.renderer and not self.renderer.render(
-                    organisms, self.food_items
+                # Render on stride cadence so observation does not block every step.
+                if (
+                    self.renderer
+                    and step % self.render_stride == 0
+                    and not self.renderer.render(organisms, self.food_items)
                 ):
                     self._finalize_genomes(genomes, genome_to_organism, organisms)
                     return
