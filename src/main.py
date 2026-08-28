@@ -24,6 +24,8 @@ def run_simulation(render=None, logging_level=None, dashboard_level=None):
     render_override = None
     logging_override = None
     dashboard_override = None
+    render_backend_override = None
+    batch_inference_override = None
     # Parse simple key=value CLI overrides.
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
@@ -34,6 +36,10 @@ def run_simulation(render=None, logging_level=None, dashboard_level=None):
                 logging_override = arg.split("=", 1)[1].lower()
             elif lowered.startswith("dashboard="):
                 dashboard_override = arg.split("=", 1)[1].lower()
+            elif lowered.startswith("render_backend="):
+                render_backend_override = arg.split("=", 1)[1].lower()
+            elif lowered.startswith("batch_inference="):
+                batch_inference_override = arg.split("=", 1)[1].lower() == "true"
 
     root = _project_root()
     # Load simulation JSON relative to the project root (CWD-independent).
@@ -54,6 +60,10 @@ def run_simulation(render=None, logging_level=None, dashboard_level=None):
         dashboard_level = dashboard_override
     elif dashboard_level is None:
         dashboard_level = sim_config.get("dashboard_level", "normal")
+    if render_backend_override is not None:
+        sim_config["render_backend"] = render_backend_override
+    if batch_inference_override is not None:
+        sim_config["batch_inference"] = batch_inference_override
 
     # Apply resolved options into the live config.
     sim_config["render"] = render

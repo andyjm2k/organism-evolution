@@ -46,14 +46,16 @@ class Simulation:
         # Optional pygame renderer.
         self.renderer = None
         if self.sim_config.get("render", False):
-            from renderer import Renderer
+            from renderer_factory import create_renderer
 
             screen_size = max(
                 self.sim_config["environment_width"],
                 self.sim_config["environment_height"],
             )
-            self.renderer = Renderer(
-                screen_size, logging_level=self.logging_level
+            self.renderer = create_renderer(
+                screen_size,
+                logging_level=self.logging_level,
+                backend=self.sim_config.get("render_backend", "pygame"),
             )
         # Shared environment contract consumed by organisms.
         detection = self.sim_config["detection_radius"]
@@ -103,6 +105,13 @@ class Simulation:
         self.num_trials = int(self.sim_config.get("num_trials", 3))
         # Draw every Nth step when rendering (B-1); 1 = every step.
         self.render_stride = max(1, int(self.sim_config.get("render_stride", 1)))
+        # Phase 5: optional NumPy batch inference (default on for headless).
+        self.batch_inference = bool(self.sim_config.get("batch_inference", True))
+        self._batch_engine = None
+        if self.batch_inference:
+            from batch_inference import BatchInferenceEngine
+
+            self._batch_engine = BatchInferenceEngine()
 
     def spawn_food(self):
         """Clear and respawn food across the arena."""
@@ -172,6 +181,10 @@ class Simulation:
             )
             organism.simulation = self
             genome_to_organism[genome_id] = organism
+            organism._inference_genome_id = genome_id
+            if self._batch_engine is not None:
+                self._batch_engine.register_genome(genome_id, genome, config)
+                organism._compiled_network = self._batch_engine._networks[genome_id]
         log_always(f"Starting evaluation with {len(genome_to_organism)} organisms")
         for trial in range(self.num_trials):
             self.spawn_food()
@@ -206,13 +219,18 @@ class Simulation:
                         org_grid.insert(other, other.position)
                 # Rebuild alive list once per step (A-6) instead of list.remove.
                 next_organisms = []
+                sensing_cache = {}
+                for organism in organisms:
+                    if organism.energy <= 0:
+                        continue
+                    sensing_cache[organism] = self._nearby_entities(
+                        organism, organisms, food_grid, org_grid
+                    )
                 for organism in organisms:
                     if organism.energy <= 0:
                         continue
                     nearby_food, nearby_organisms, nearby_threats, nearby_partners = (
-                        self._nearby_entities(
-                            organism, organisms, food_grid, org_grid
-                        )
+                        sensing_cache[organism]
                     )
                     organism.take_action(
                         nearby_food,
@@ -310,6 +328,8 @@ class Simulation:
         for organism in genome_to_organism.values():
             organism.cleanup()
         genome_to_organism.clear()
+        if self._batch_engine is not None:
+            self._batch_engine.clear()
 
     def _print_generation_dashboard(self, generation, stats):
         """Emit a compact generation summary from snapshot stats."""

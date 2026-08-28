@@ -385,5 +385,7 @@ Headless CI should not require GPU deps.
 | A-12 | Done | `num_trials` configurable (default 3) |
 | B-1 | Done | `render_stride` (default 10) draws every Nth step |
 | B-2 | Done | Arena organisms blit from cached `get_species_visual` surfaces |
-| B-3+ | Pending | ModernGL backend |
-| C-* | Pending | Batch NN after parity suite |
+| B-3 | Done | `ModernGLRenderer` + `render_backend=moderngl` (falls back to pygame) |
+| B-4 | Done | Scoreboard/HUD rasterized to cached GL textures |
+| C-1 | Done | `CompiledNetwork` + `BatchInferenceEngine`; `batch_inference` config flag |
+| C-parity | Done | `tests/test_batch_parity.py` seeded fitness match |
