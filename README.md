@@ -94,6 +94,38 @@ Run the full unit test suite from the repository root:
 python3 -m unittest discover -s tests -v
 ```
 
+Optional GPU dependencies (for `render_backend=moderngl`):
+
+```bash
+pip install -r requirements-gpu.txt
+```
+
+### GPU smoke tests
+
+`tests/test_renderer_gl.py` runs live ModernGL init/render tests **only when OpenGL is available** (display + `libGL`). In headless CI they are **skipped**, not failed.
+
+Check whether GPU tests would run on your machine:
+
+```bash
+python3 -c "from tests.gl_support import opengl_available, skip_reason; print(opengl_available(), skip_reason())"
+```
+
+### Manual visual checklist (GPU renderer)
+
+Use this when validating `render=true render_backend=moderngl` on a machine with a display:
+
+1. Install GPU deps: `pip install -r requirements-gpu.txt`
+2. Start visual run: `python src/main.py render=true render_backend=moderngl`
+3. Confirm window title contains **GPU** and arena renders (food dots + colored organisms)
+4. Confirm scoreboard panel on the right shows species cards (or “Waiting for species data…” early on)
+5. Confirm HUD text top-left updates (`Food`, `Gen`, `Species`) as the sim runs
+6. Let one generation complete; verify terminal dashboard still prints
+7. Close the window — sim should exit cleanly without traceback
+8. Compare with pygame backend: `python src/main.py render=true render_backend=pygame` (same layout, software draw)
+
+If ModernGL fails to init, the factory falls back to pygame and logs  
+`ModernGL renderer unavailable (...); falling back to pygame`.
+
 ## Project layout
 
 ```
