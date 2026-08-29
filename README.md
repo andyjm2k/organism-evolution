@@ -17,17 +17,25 @@ This project simulates the genetic evolution of simple cell organisms using the 
    pip install -r requirements.txt
    ```
 
-2. Run the simulation with visual rendering (default):
+   For GPU rendering (`render_backend=moderngl`):
+   ```bash
+   pip install -r requirements-gpu.txt
+   ```
+
+2. Run headless training (default from JSON):
    ```bash
    python src/main.py
    ```
 
-3. Run the simulation in headless mode (no visual rendering):
+3. Run with visual rendering:
    ```bash
-   python src/main.py render=false
+   python src/main.py render=true
    ```
 
-   In headless mode, a terminal dashboard will display the top species after each generation.
+4. Run with GPU renderer (requires OpenGL display):
+   ```bash
+   python src/main.py render=true render_backend=moderngl
+   ```
 
 ## Running Options
 
@@ -35,7 +43,8 @@ CLI flags use `key=value` syntax and override `config/simulation-config.json`:
 
 | Flag | Values | Description |
 |------|--------|-------------|
-| `render=` | `true` / `false` | Enable or disable pygame rendering |
+| `render=` | `true` / `false` | Enable or disable rendering |
+| `render_backend=` | `pygame` / `moderngl` | Software pygame or GPU ModernGL backend |
 | `logging=` | `normal` / `detailed` | Console log verbosity during evaluation |
 | `dashboard=` | `minimal` / `normal` / `detailed` | Terminal scoreboard detail level |
 
@@ -55,7 +64,13 @@ When rendering, `render_stride` in JSON controls how often frames are drawn (def
 ## Configuration
 
 - `config/neat-config.ini`: NEAT algorithm settings (**22 network inputs**, 8 outputs)
-- `config/simulation-config.json`: Simulation parameters (arena size, food count, detection radii, energy economy)
+- `config/simulation-config.json`: Simulation parameters (arena size, food count, detection radii, energy economy, `batch_inference`, `render_backend`)
+
+Performance-related JSON keys:
+
+- `batch_inference` (default `true`): NumPy-compiled forward passes with parity to NEAT `activate`
+- `render_backend`: `pygame` (default) or `moderngl` (GPU instanced draw; falls back to pygame)
+- `render_stride`: draw every Nth sim step when rendering (default `10`)
 
 Legacy JSON keys are still supported:
 

@@ -9,24 +9,7 @@ from distance import colliding, distance, within_radius
 from fitness import calculate_fitness
 from logging_util import log_detailed
 from network_inputs import build_network_inputs
-
-# Name fragments used when minting a scientific species label.
-GENUS_PREFIXES = [
-    "Neo", "Cyber", "Digi", "Techno", "Synth", "Bio", "Quantum", "Meta",
-    "Nano", "Robo", "Auto", "Proto", "Mega", "Ultra", "Hyper", "Super",
-]
-GENUS_SUFFIXES = [
-    "bot", "tron", "droid", "mind", "form", "morph", "ware", "byte",
-    "mech", "flex", "gen", "zoid", "pod", "roid", "node", "net",
-]
-SPECIES_PREFIXES = [
-    "micro", "macro", "multi", "omni", "uni", "poly", "pseudo", "quasi",
-    "semi", "sub", "super", "trans", "ultra", "anti", "meta", "para",
-]
-SPECIES_SUFFIXES = [
-    "formis", "ensis", "oides", "atus", "inus", "alis", "arius", "osus",
-    "ivus", "ilis", "icus", "anus", "eus", "ius", "aris", "ifer",
-]
+from species_names import generate_scientific_name
 
 class Organism:
     """A single evolved agent controlled by a NEAT feed-forward network."""
@@ -183,10 +166,13 @@ class Organism:
             nearby_breeding_partners,
             self.environment_config,
         )
-        # Query the phenotype for movement + breed desire.
-        output = self.network.activate(inputs)
-        movement_outputs = output[:7]
-        breeding_desire = output[7]
+        compiled = getattr(self, "_compiled_network", None)
+        if compiled is not None:
+            network_output = compiled.activate(inputs)
+        else:
+            network_output = self.network.activate(inputs)
+        movement_outputs = network_output[:7]
+        breeding_desire = network_output[7]
         # Small noise prevents permanent hard ties on the first generation.
         noisy = [v + random.uniform(-0.01, 0.01) for v in movement_outputs]
         direction_index = noisy.index(max(noisy))
@@ -460,9 +446,7 @@ class Organism:
     @staticmethod
     def generate_scientific_name():
         """Mint a random binomial-style name for a successful species."""
-        genus = random.choice(GENUS_PREFIXES) + random.choice(GENUS_SUFFIXES)
-        species = random.choice(SPECIES_PREFIXES) + random.choice(SPECIES_SUFFIXES)
-        return f"{genus} {species}"
+        return generate_scientific_name()
 
     def reset(self, environment_config):
         """Reset episode state while keeping the genome/network."""
@@ -495,6 +479,7 @@ class Organism:
         self.genome = None
         self.config = None
         self.simulation = None
+        self._compiled_network = None
         self.avg_steps_between_food.clear()
         self.avg_steps_between_hunts.clear()
         self.last_positions.clear()

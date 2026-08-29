@@ -19,7 +19,9 @@
     "boundary_penalty": 0.5,
     "screen": null,
     "render": false,
+    "render_backend": "pygame",
     "render_stride": 10,
+    "batch_inference": true,
     "logging_level": "normal",
     "dashboard_level": "normal"
 }
