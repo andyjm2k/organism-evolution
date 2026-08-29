@@ -57,6 +57,7 @@ class Simulation:
                 logging_level=self.logging_level,
                 backend=self.sim_config.get("render_backend", "pygame"),
             )
+            self.renderer.set_environment_config(self.environment_config)
         # Shared environment contract consumed by organisms.
         detection = self.sim_config["detection_radius"]
         self.environment_config = {
@@ -206,6 +207,11 @@ class Simulation:
                             return
                         if event.type == pygame.MOUSEBUTTONDOWN and self.renderer:
                             self.handle_click(event.pos, organisms)
+                        if event.type == pygame.KEYDOWN and self.renderer:
+                            if event.key == pygame.K_s:
+                                self.renderer.toggle_sense_rings()
+                            elif event.key == pygame.K_ESCAPE:
+                                self.renderer.set_selected_organism(None)
                 # Clear and refill reused grids (A-3) instead of reallocating.
                 food_grid = self._food_grid
                 org_grid = self._org_grid
@@ -356,17 +362,32 @@ class Simulation:
         log_always(f"- Organisms Consumed: {stats['best_kills']}")
 
     def handle_click(self, pos, organisms):
-        """Log clicks on organisms when a renderer is active."""
+        """Select an organism under the cursor for trail/sense-ring overlays."""
         if not self.renderer:
             return
+        main_width = self.sim_config["environment_width"]
+        if pos[0] >= main_width:
+            return
         log_detailed(self.logging_level, f"Click at {pos}")
+        best_match = None
+        best_distance = float("inf")
         for organism in organisms:
-            if organism.position and within_radius(pos, organism.position, 10):
-                log_detailed(
-                    self.logging_level,
-                    f"Clicked organism species={organism.species_id}",
+            if not organism.position or organism.energy <= 0:
+                continue
+            hit_radius = max(10, organism.get_radius() + 4)
+            if within_radius(pos, organism.position, hit_radius):
+                distance = abs(pos[0] - organism.position[0]) + abs(
+                    pos[1] - organism.position[1]
                 )
-                break
+                if distance < best_distance:
+                    best_distance = distance
+                    best_match = organism
+        self.renderer.set_selected_organism(best_match)
+        if best_match is not None:
+            log_detailed(
+                self.logging_level,
+                f"Selected organism species={best_match.species_id}",
+            )
 
     def run(self, max_generations=None):
         """Evolve the population until generations or fitness threshold."""

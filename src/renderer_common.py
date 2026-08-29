@@ -21,6 +21,10 @@ class RendererCommon:
         self.species_surfaces = {}
         self.text_surfaces = {}
         self.last_cache_clear = 0
+        # Click-selected organism and sense-ring overlay toggle (S key).
+        self.selected_organism = None
+        self.show_sense_rings = True
+        self.environment_config = None
         self._init_fonts()
 
     def _init_fonts(self):
@@ -71,6 +75,87 @@ class RendererCommon:
         """Return species RGB in 0..1 for GPU shaders."""
         red, green, blue = self.get_species_color(species_id, is_carnivore)
         return (red / 255.0, green / 255.0, blue / 255.0)
+
+    def set_environment_config(self, environment_config):
+        """Store arena radii used for sense-ring overlays."""
+        self.environment_config = environment_config
+
+    def set_selected_organism(self, organism):
+        """Highlight one organism and optionally draw its sense radii."""
+        self.selected_organism = organism
+
+    def toggle_sense_rings(self):
+        """Toggle sense-radius rings for the selected organism."""
+        self.show_sense_rings = not self.show_sense_rings
+
+    def draw_movement_trails(self, surface, organisms):
+        """Draw fading polylines for recent organism movement."""
+        for organism in organisms:
+            trail = getattr(organism, "movement_trail", None)
+            if not trail or len(trail) < 2:
+                continue
+            if organism.position is None or organism.energy <= 0:
+                continue
+            color = self.get_species_color(
+                str(organism.species_id), organism.is_carnivore
+            )
+            point_count = len(trail)
+            for index in range(1, point_count):
+                alpha = int(40 + (180 * index / point_count))
+                trail_color = (
+                    min(255, int(color[0] * alpha / 255)),
+                    min(255, int(color[1] * alpha / 255)),
+                    min(255, int(color[2] * alpha / 255)),
+                )
+                start = (int(trail[index - 1][0]), int(trail[index - 1][1]))
+                end = (int(trail[index][0]), int(trail[index][1]))
+                pygame.draw.line(surface, trail_color, start, end, 2)
+
+    def draw_sense_rings(self, surface, organism):
+        """Draw food/threat/breeding detection radii for one organism."""
+        if not self.show_sense_rings or organism.position is None:
+            return
+        config = self.environment_config or {}
+        x, y = int(organism.position[0]), int(organism.position[1])
+        rings = []
+        if not organism.is_carnivore:
+            rings.append(
+                (
+                    config.get(
+                        "food_detection_radius",
+                        config.get("detection_radius", 200),
+                    ),
+                    (120, 220, 120),
+                )
+            )
+        threat_label = (
+            config.get("detection_radius", 200)
+            if organism.is_carnivore
+            else config.get(
+                "threat_detection_radius", config.get("detection_radius", 200)
+            )
+        )
+        rings.append((threat_label, (240, 120, 90)))
+        rings.append(
+            (
+                config.get(
+                    "breeding_detection_radius",
+                    config.get("detection_radius", 200),
+                ),
+                (170, 130, 230),
+            )
+        )
+        for radius, color in rings:
+            if radius and radius > 0:
+                pygame.draw.circle(surface, color, (x, y), int(radius), 1)
+
+    def draw_selection_highlight(self, surface, organism):
+        """Outline the currently selected organism."""
+        if organism.position is None or organism.energy <= 0:
+            return
+        pos = (int(organism.position[0]), int(organism.position[1]))
+        highlight_radius = int(organism.get_radius()) + 6
+        pygame.draw.circle(surface, (255, 210, 60), pos, highlight_radius, 2)
 
     def set_generation(self, generation):
         """Update generation label and periodically clear caches."""

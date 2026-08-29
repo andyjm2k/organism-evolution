@@ -63,6 +63,9 @@ class PygameRenderer(RendererCommon):
                     pygame.draw.circle(self.screen, (0, 255, 0), pos, 4)
 
         if organisms:
+            self.draw_movement_trails(self.screen, organisms[:render_limit])
+            if self.selected_organism and self.show_sense_rings:
+                self.draw_sense_rings(self.screen, self.selected_organism)
             for organism in organisms[:render_limit]:
                 if organism.position is not None and organism.energy > 0:
                     pos = (int(organism.position[0]), int(organism.position[1]))
@@ -82,6 +85,8 @@ class PygameRenderer(RendererCommon):
                             pos[1] - visual.get_height() // 2,
                         ),
                     )
+            if self.selected_organism is not None:
+                self.draw_selection_highlight(self.screen, self.selected_organism)
 
         if organisms:
             species_count = len(set(org.species_id for org in organisms))

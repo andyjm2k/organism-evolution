@@ -36,7 +36,7 @@ class TestCompiledNetwork(unittest.TestCase):
             reference = neat.nn.FeedForwardNetwork.create(genome, config)
             compiled = CompiledNetwork.from_genome(genome, config)
             for _ in range(20):
-                inputs = [random.random() for _ in range(22)]
+                inputs = [random.random() for _ in range(31)]
                 expected = reference.activate(inputs)
                 actual = compiled.activate(inputs)
                 for index, (exp, got) in enumerate(zip(expected, actual)):
@@ -47,14 +47,14 @@ class TestCompiledNetwork(unittest.TestCase):
                         msg=f"Output {index} mismatch for genome {_genome_id}",
                     )
 
-    def test_output_length_is_eight(self):
-        """Network must return eight outputs per neat-config."""
+    def test_output_length_is_four(self):
+        """Network must return four outputs per neat-config."""
         config = _load_neat_config()
         population = neat.Population(config)
         _genome_id, genome = next(iter(population.population.items()))
         compiled = CompiledNetwork.from_genome(genome, config)
-        outputs = compiled.activate([0.5] * 22)
-        self.assertEqual(len(outputs), 8)
+        outputs = compiled.activate([0.5] * 31)
+        self.assertEqual(len(outputs), 4)
 
 
 if __name__ == "__main__":

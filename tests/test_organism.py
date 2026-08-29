@@ -113,12 +113,39 @@ class TestOrganism(unittest.TestCase):
         self.assertEqual(organism.highest_fitness, 0.0)
 
     def test_fitness_includes_bonus(self):
-        # Explicit fitness bonuses must affect the selection signal.
         organism = _make_organism()
         base = organism.calculate_fitness()
         organism.fitness_bonus += 500
         boosted = organism.calculate_fitness()
         self.assertGreater(boosted, base)
+
+    def test_continuous_movement_updates_position(self):
+        organism = _make_organism(is_carnivore=False)
+        organism.energy = 200
+        start = organism.position
+        organism.network = _SteeringNetwork([1.0, 1.0, -1.0, -1.0])
+        organism.take_action([], [], [], [])
+        self.assertNotEqual(organism.position, start)
+        self.assertGreater(len(organism.movement_trail), 0)
+
+    def test_rest_output_prevents_movement(self):
+        organism = _make_organism(is_carnivore=False)
+        organism.energy = 200
+        start = organism.position
+        organism.network = _SteeringNetwork([1.0, 1.0, -1.0, 1.0])
+        organism.take_action([], [], [], [])
+        self.assertEqual(organism.position, start)
+        self.assertEqual(len(organism.movement_trail), 0)
+
+
+class _SteeringNetwork:
+    """Stub network returning fixed steering outputs for movement tests."""
+
+    def __init__(self, outputs):
+        self._outputs = outputs
+
+    def activate(self, _inputs):
+        return list(self._outputs)
 
 
 if __name__ == "__main__":

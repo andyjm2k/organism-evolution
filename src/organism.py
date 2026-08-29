@@ -63,6 +63,9 @@ class Organism:
         self.avg_steps_between_hunts = []
         # Coarse exploration trail for fitness.
         self.last_positions = []
+        # Recent positions for renderer movement trails.
+        self.movement_trail = []
+        self._trail_max_length = 24
         # Diet type is stable within a species id.
         self.is_carnivore = self._diet_from_species(species_id)
         # Derive speed/size/energy from genome structure + config economy.
@@ -171,34 +174,32 @@ class Organism:
             network_output = compiled.activate(inputs)
         else:
             network_output = self.network.activate(inputs)
-        movement_outputs = network_output[:7]
-        breeding_desire = network_output[7]
-        # Small noise prevents permanent hard ties on the first generation.
-        noisy = [v + random.uniform(-0.01, 0.01) for v in movement_outputs]
-        direction_index = noisy.index(max(noisy))
-        # Seven discrete headings around the circle.
-        angles = [0, 60, 120, 180, 240, 300, 360]
+        # Continuous control: angle, speed fraction, breed desire, rest gate.
+        angle_signal = network_output[0] + random.uniform(-0.01, 0.01)
+        speed_signal = network_output[1] + random.uniform(-0.01, 0.01)
+        breeding_desire = network_output[2]
+        rest_desire = network_output[3] if len(network_output) > 3 else -1.0
         width = self.environment_config.get("width", 800)
         height = self.environment_config.get("height", 600)
         move_x = move_y = 0.0
-        if direction_index < len(angles):
-            angle_rad = math.radians(angles[direction_index])
-            move_x = self.speed * math.cos(angle_rad)
-            move_y = self.speed * math.sin(angle_rad)
-            # Light jitter avoids perfectly straight tracks.
-            move_x += random.uniform(-0.1, 0.1) * self.speed
-            move_y += random.uniform(-0.1, 0.1) * self.speed
-        # Clamp inside the arena (update may wrap with penalty).
+        if rest_desire <= 0.5:
+            # Map tanh outputs into heading [0, 2pi) and speed [0, max speed].
+            angle_rad = ((angle_signal + 1.0) / 2.0) * (2.0 * math.pi)
+            speed_fraction = max(0.0, min(1.0, (speed_signal + 1.0) / 2.0))
+            step_speed = self.speed * speed_fraction
+            move_x = step_speed * math.cos(angle_rad)
+            move_y = step_speed * math.sin(angle_rad)
+            move_x += random.uniform(-0.05, 0.05) * self.speed
+            move_y += random.uniform(-0.05, 0.05) * self.speed
         new_x = max(0, min(self.position[0] + move_x, width))
         new_y = max(0, min(self.position[1] + move_y, height))
         if abs(move_x) > 0 or abs(move_y) > 0:
             self.position = (new_x, new_y)
             self.was_moving = True
-            # Pay movement energy from config-derived cost.
+            self._append_trail_point(self.position)
             self.energy = max(0, self.energy - self.movement_energy_cost)
         else:
             self.was_moving = False
-        # Breeding attempt when desire and readiness align.
         if breeding_desire > 0.5 and self.can_breed():
             self._try_breed(nearby_breeding_partners or nearby_organisms)
 
@@ -232,6 +233,13 @@ class Organism:
         self.check_for_food(food_items)
         if self.is_carnivore:
             self.hunt_prey(organisms)
+
+    def _append_trail_point(self, position):
+        """Record a movement trail point for renderer overlays."""
+        if not self.movement_trail or self.movement_trail[-1] != position:
+            self.movement_trail.append(position)
+        if len(self.movement_trail) > self._trail_max_length:
+            self.movement_trail.pop(0)
 
     def _apply_boundary_rules(self):
         """Wrap at edges and apply boundary energy penalty."""
@@ -468,6 +476,7 @@ class Organism:
         self.steps_since_last_food = 0
         self.steps_since_last_hunt = 0
         self.last_positions = []
+        self.movement_trail = []
         self.is_carnivore = self._diet_from_species(self.species_id)
         self._calculate_attributes()
         # Reset energy to configured starting amount for the new episode.
@@ -483,3 +492,4 @@ class Organism:
         self.avg_steps_between_food.clear()
         self.avg_steps_between_hunts.clear()
         self.last_positions.clear()
+        self.movement_trail.clear()

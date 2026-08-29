@@ -8,7 +8,8 @@ This project simulates the genetic evolution of simple cell organisms using the 
 - Visual rendering of the simulation
 - Genetic evolution using NEAT
 - Terminal dashboard for headless mode
-- 22-channel neural network inputs (food, prey/threat, breeding)
+- 31-channel neural network inputs (food, prey/threat, breeding — nearest + second-nearest)
+- Continuous steering control (angle + speed) with movement trails and click-to-inspect overlays
 
 ## Setup
 
@@ -63,7 +64,7 @@ When rendering, `render_stride` in JSON controls how often frames are drawn (def
 
 ## Configuration
 
-- `config/neat-config.ini`: NEAT algorithm settings (**22 network inputs**, 8 outputs)
+- `config/neat-config.ini`: NEAT algorithm settings (**31 network inputs**, 4 outputs)
 - `config/simulation-config.json`: Simulation parameters (arena size, food count, detection radii, energy economy, `batch_inference`, `render_backend`)
 
 Performance-related JSON keys:
@@ -77,14 +78,29 @@ Legacy JSON keys are still supported:
 - `petridish_size` → `environment_width` / `environment_height`
 - `episode_length` → `simulation_steps`
 
-### Neural network input schema (22 channels)
+When rendering, use **click** to select an organism, **S** to toggle sense-radius rings, and **Esc** to clear selection. Movement trails fade behind each organism automatically.
+
+### Neural network input schema (31 channels)
 
 | Channels | Content |
 |----------|---------|
 | 0–8 | Core body/environment (energy, position, movement, size, boundaries) |
-| 9–12 | Food sensing (herbivores; zeros for carnivores) |
-| 13–16 | Prey (carnivores) or threats (herbivores) |
-| 17–21 | Breeding partners and readiness |
+| 9–12 | Nearest food (herbivores; zeros for carnivores) |
+| 13–15 | Second-nearest food |
+| 16–19 | Nearest prey (carnivores) or threats (herbivores) |
+| 20–22 | Second-nearest prey/threat |
+| 23–26 | Nearest breeding partner |
+| 27 | Breeding readiness |
+| 28–30 | Second-nearest breeding partner |
+
+### Neural network outputs (4 channels)
+
+| Output | Role |
+|--------|------|
+| 0 | Steering angle (tanh → full circle) |
+| 1 | Speed fraction (tanh → 0..max speed) |
+| 2 | Breeding desire (>0.5 triggers attempt) |
+| 3 | Rest gate (>0.5 skips movement) |
 
 ## Testing
 
