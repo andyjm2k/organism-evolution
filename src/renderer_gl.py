@@ -104,7 +104,10 @@ class ModernGLRenderer(RendererCommon):
         )
         self._scoreboard_texture = None
         self._hud_texture = None
+        self._overlay_texture = None
         self._hud_key = None
+        self.ctx.enable(moderngl.BLEND)
+        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         log_detailed(logging_level, f"ModernGL renderer initialized ({size}x{size})")
 
     def render(self, organisms, food_items):
@@ -152,11 +155,33 @@ class ModernGLRenderer(RendererCommon):
             self._instance_vbo.write(data)
             self._vao.render(moderngl.TRIANGLES, instances=len(instances) // 6)
 
+        self._draw_arena_overlays(organisms)
         self._draw_scoreboard_panel()
         self._draw_hud(organisms, food_items)
         pygame.display.flip()
         self.clock.tick(60)
         return True
+
+    def _draw_arena_overlays(self, organisms):
+        """Rasterize trails and selection overlays onto the GL arena."""
+        if not organisms:
+            return
+        overlay = pygame.Surface((self.arena_size, self.arena_size), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 0))
+        render_limit = 500
+        self.draw_movement_trails(overlay, organisms[:render_limit])
+        if self.selected_organism and self.show_sense_rings:
+            self.draw_sense_rings(overlay, self.selected_organism)
+        if self.selected_organism is not None:
+            self.draw_selection_highlight(overlay, self.selected_organism)
+        width, height = overlay.get_size()
+        if self._overlay_texture is None or self._overlay_texture.size != (width, height):
+            if self._overlay_texture is not None:
+                self._overlay_texture.release()
+            self._overlay_texture = self.ctx.texture((width, height), 4)
+            self._overlay_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        self._overlay_texture.write(pygame.image.tostring(overlay, "RGBA", True))
+        self._blit_panel_texture(self._overlay_texture, 0, 0, width, height)
 
     def _draw_scoreboard_panel(self):
         """Upload cached scoreboard pygame surface as a GL texture."""
@@ -230,3 +255,6 @@ class ModernGLRenderer(RendererCommon):
         if self._hud_texture is not None:
             self._hud_texture.release()
             self._hud_texture = None
+        if self._overlay_texture is not None:
+            self._overlay_texture.release()
+            self._overlay_texture = None

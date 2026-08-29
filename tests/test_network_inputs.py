@@ -13,7 +13,6 @@ from network_inputs import NUM_NETWORK_INPUTS, build_network_inputs
 
 def _make_organism(is_carnivore=False):
     """Build a lightweight organism stub for input tests."""
-    # Minimal attribute set required by build_network_inputs.
     return SimpleNamespace(
         position=(100.0, 100.0),
         last_position=(100.0, 100.0),
@@ -27,10 +26,9 @@ def _make_organism(is_carnivore=False):
 
 
 class TestNetworkInputs(unittest.TestCase):
-    """Ensure the NN input vector length and threat channels are correct."""
+    """Ensure the NN input vector length and sensing channels are correct."""
 
     def setUp(self):
-        # Shared environment config for schema tests.
         self.env = {
             "width": 800,
             "height": 600,
@@ -40,38 +38,42 @@ class TestNetworkInputs(unittest.TestCase):
             "breeding_detection_radius": 150,
         }
 
-    def test_input_length_is_twenty_two(self):
-        # Both diets must produce exactly NUM_NETWORK_INPUTS channels.
+    def test_input_length_is_thirty_one(self):
         herbivore = _make_organism(False)
         carnivore = _make_organism(True)
         h_inputs = build_network_inputs(herbivore, [], [], [], [], self.env)
         c_inputs = build_network_inputs(carnivore, [], [], [], [], self.env)
         self.assertEqual(len(h_inputs), NUM_NETWORK_INPUTS)
         self.assertEqual(len(c_inputs), NUM_NETWORK_INPUTS)
-        self.assertEqual(NUM_NETWORK_INPUTS, 22)
+        self.assertEqual(NUM_NETWORK_INPUTS, 31)
 
     def test_herbivore_receives_threat_channels(self):
-        # Herbivores should encode nearby threats in channels 13-16.
         herbivore = _make_organism(False)
         threat = SimpleNamespace(position=(120.0, 100.0), is_carnivore=True)
         inputs = build_network_inputs(
             herbivore, [], [], [threat], [], self.env
         )
-        # Channel 13 is threat count density; must be > 0 when a threat exists.
-        self.assertGreater(inputs[13], 0.0)
-        # Channel 14 is normalized distance; should be < 1 for a nearby threat.
-        self.assertLess(inputs[14], 1.0)
+        self.assertGreater(inputs[16], 0.0)
+        self.assertLess(inputs[17], 1.0)
+
+    def test_second_nearest_food_is_reported(self):
+        herbivore = _make_organism(False)
+        near = SimpleNamespace(position=(120.0, 100.0))
+        far = SimpleNamespace(position=(180.0, 100.0))
+        inputs = build_network_inputs(
+            herbivore, [near, far], [], [], [], self.env
+        )
+        self.assertLess(inputs[13], 1.0)
+        self.assertLess(inputs[10], 1.0)
+        self.assertGreater(inputs[13], inputs[10])
 
     def test_carnivore_food_channels_are_zeroed(self):
-        # Carnivores do not forage; food channels stay at the empty sentinel.
         carnivore = _make_organism(True)
         food = SimpleNamespace(position=(110.0, 100.0))
         inputs = build_network_inputs(carnivore, [food], [], [], [], self.env)
-        # Empty food sentinel is [0, 1, 0, 0].
-        self.assertEqual(inputs[9:13], [0.0, 1.0, 0.0, 0.0])
+        self.assertEqual(inputs[9:16], [0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
 
     def test_closest_entity_prefers_nearer_candidate(self):
-        # Squared-distance path must still pick the nearer of two entities.
         from network_inputs import _closest_entity
 
         herbivore = _make_organism(False)
@@ -81,9 +83,7 @@ class TestNetworkInputs(unittest.TestCase):
             herbivore, [far, near], 300
         )
         self.assertGreater(count, 0.0)
-        # Nearer entity is 20 units away → lower normalized distance.
         self.assertLess(dist_norm, 250.0 / 300.0)
-        # Direction should point toward the nearer (+x) candidate.
         self.assertGreater(dx_norm, 0.0)
 
 
