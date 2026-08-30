@@ -110,6 +110,52 @@ class TestSimulation(unittest.TestCase):
         self.assertIsNotNone(simulation._food_grid)
         self.assertIsNotNone(simulation._org_grid)
 
+    def test_environment_config_initialized_before_renderer(self):
+        """environment_config must be set before renderer initialization."""
+        # Load NEAT config from the project config directory.
+        root = Path(__file__).resolve().parents[1]
+        neat_config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            str(root / "config" / "neat-config.ini"),
+        )
+        # Test with render=False (renderer should be None).
+        sim_config_no_render = {
+            "environment_width": 200,
+            "environment_height": 200,
+            "num_food_items": 4,
+            "simulation_steps": 5,
+            "detection_radius": 80,
+            "num_generations": 1,
+            "render": False,
+            "logging_level": "normal",
+        }
+        simulation_no_render = Simulation(neat_config, sim_config_no_render)
+        # environment_config should exist even without renderer.
+        self.assertIsNotNone(simulation_no_render.environment_config)
+        self.assertIn("width", simulation_no_render.environment_config)
+        self.assertIn("height", simulation_no_render.environment_config)
+        self.assertIsNone(simulation_no_render.renderer)
+        # Test with render=True (renderer should be initialized).
+        sim_config_render = {
+            "environment_width": 200,
+            "environment_height": 200,
+            "num_food_items": 4,
+            "simulation_steps": 5,
+            "detection_radius": 80,
+            "num_generations": 1,
+            "render": True,
+            "logging_level": "normal",
+        }
+        simulation_render = Simulation(neat_config, sim_config_render)
+        # environment_config should exist and renderer should be created.
+        self.assertIsNotNone(simulation_render.environment_config)
+        self.assertIn("width", simulation_render.environment_config)
+        self.assertIn("height", simulation_render.environment_config)
+        self.assertIsNotNone(simulation_render.renderer)
+
 
 if __name__ == "__main__":
     unittest.main()
