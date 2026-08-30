@@ -62,6 +62,10 @@ class Simulation:
             "starting_energy": self.sim_config.get("starting_energy"),
             "food_energy_value": self.sim_config.get("food_energy_value", 75),
             "movement_cost": self.sim_config.get("movement_cost"),
+            "breeding_cooldown": self.sim_config.get("breeding_cooldown", 200),
+            "offspring_starting_energy": self.sim_config.get(
+                "offspring_starting_energy", 50
+            ),
         }
         # Optional pygame renderer (initialized after environment_config is set).
         self.renderer = None
@@ -178,8 +182,11 @@ class Simulation:
                 (x, y),
                 self.environment_config,
                 species_id=species_id,
+                diet_key=genome_id,
                 logging_level=self.logging_level,
             )
+            organism.genome_id = genome_id
+            organism._diet_key = genome_id
             organism.simulation = self
             genome_to_organism[genome_id] = organism
             organism._inference_genome_id = genome_id
