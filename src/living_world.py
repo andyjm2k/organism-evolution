@@ -52,6 +52,10 @@ class LivingWorldSimulation:
             "starting_energy": self.sim_config.get("starting_energy"),
             "food_energy_value": self.sim_config.get("food_energy_value", 40),
             "movement_cost": self.sim_config.get("movement_cost"),
+            "breeding_cooldown": self.sim_config.get("breeding_cooldown", 200),
+            "offspring_starting_energy": self.sim_config.get(
+                "offspring_starting_energy", 50
+            ),
         }
         # Ecology and population subsystems.
         self.food_ecology = FoodEcology(self.sim_config)

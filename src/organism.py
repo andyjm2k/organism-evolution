@@ -21,6 +21,7 @@ class Organism:
         position,
         environment_config,
         species_id=None,
+        diet_key=None,
         logging_level="normal",
     ):
         # Genome drives network topology and is scored after evaluation.
@@ -53,9 +54,11 @@ class Organism:
         self.last_position = position
         # Whether the last action produced movement.
         self.was_moving = False
-        # Cooldown bookkeeping for breeding attempts.
-        self.steps_since_breeding = 1000
-        self.breeding_cooldown = 200
+        # Cooldown bookkeeping for breeding attempts (0 = must wait full cooldown).
+        self.breeding_cooldown = int(
+            self.environment_config.get("breeding_cooldown", 200)
+        )
+        self.steps_since_breeding = 0
         # Time since last successful forage / hunt for fitness curves.
         self.steps_since_last_food = 0
         self.steps_since_last_hunt = 0
@@ -66,8 +69,9 @@ class Organism:
         # Recent positions for renderer movement trails.
         self.movement_trail = []
         self._trail_max_length = 24
-        # Diet type is stable within a species id.
-        self.is_carnivore = self._diet_from_species(species_id)
+        # Diet keyed by genome id when provided so gen-0 gets mixed roles.
+        self._diet_key = diet_key if diet_key is not None else species_id
+        self.is_carnivore = self._diet_from_species(self._diet_key)
         # Derive speed/size/energy from genome structure + config economy.
         self._calculate_attributes()
         # Start from configured starting energy (not always max capacity).
@@ -398,6 +402,11 @@ class Organism:
             species_id=self.species_id,
             logging_level=self.logging_level,
         )
+        offspring_energy = float(
+            self.environment_config.get("offspring_starting_energy", 50)
+        )
+        child.energy = min(offspring_energy, child.max_energy)
+        child.steps_since_breeding = 0
         # Living-world harness integrates births into the gene pool.
         if self.simulation is not None:
             if hasattr(self.simulation, "register_birth"):
@@ -475,12 +484,16 @@ class Organism:
         self.was_moving = False
         self.fitness_bonus = 0.0
         self.highest_fitness = 0.0
-        self.steps_since_breeding = 1000
+        self.steps_since_breeding = 0
+        self.breeding_cooldown = int(
+            self.environment_config.get("breeding_cooldown", 200)
+        )
         self.steps_since_last_food = 0
         self.steps_since_last_hunt = 0
         self.last_positions = []
         self.movement_trail = []
-        self.is_carnivore = self._diet_from_species(self.species_id)
+        diet_key = getattr(self, "_diet_key", getattr(self, "genome_id", self.species_id))
+        self.is_carnivore = self._diet_from_species(diet_key)
         self._calculate_attributes()
         # Reset energy to configured starting amount for the new episode.
         self.energy = self._starting_energy

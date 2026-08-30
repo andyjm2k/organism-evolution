@@ -43,9 +43,11 @@ class PopulationRegistry:
             position,
             self.environment_config,
             species_id=species_id,
+            diet_key=genome_id,
             logging_level=self.logging_level,
         )
         organism.genome_id = genome_id
+        organism._diet_key = genome_id
         organism._inference_genome_id = genome_id
         return organism
 
@@ -77,7 +79,12 @@ class PopulationRegistry:
         self._next_genome_id += 1
         child_genome.key = genome_id
         child_organism.genome_id = genome_id
+        child_organism._diet_key = genome_id
         child_organism._inference_genome_id = genome_id
+        preserved_energy = child_organism.energy
+        child_organism.is_carnivore = Organism._diet_from_species(genome_id)
+        child_organism._calculate_attributes()
+        child_organism.energy = min(preserved_energy, child_organism.max_energy)
         if batch_engine is not None:
             batch_engine.register_genome(genome_id, child_genome, self.neat_config)
             child_organism._compiled_network = batch_engine._networks[genome_id]

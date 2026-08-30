@@ -89,9 +89,25 @@ class TestOrganism(unittest.TestCase):
         # Breeding requires energy >= 100 (unified gate).
         organism = _make_organism(position=(400, 300))
         organism.energy = 99
-        organism.steps_since_breeding = 1000
+        organism.steps_since_breeding = 200
         self.assertFalse(organism.can_breed())
         organism.energy = 100
+        self.assertTrue(organism.can_breed())
+
+    def test_new_organism_cannot_breed_immediately(self):
+        # Cooldown starts at zero so fresh spawns must wait.
+        organism = _make_organism(position=(400, 300))
+        organism.energy = 200
+        self.assertEqual(organism.steps_since_breeding, 0)
+        self.assertFalse(organism.can_breed())
+
+    def test_cooldown_blocks_breeding_until_threshold(self):
+        organism = _make_organism(position=(400, 300))
+        organism.energy = 200
+        organism.breeding_cooldown = 200
+        organism.steps_since_breeding = 199
+        self.assertFalse(organism.can_breed())
+        organism.steps_since_breeding = 200
         self.assertTrue(organism.can_breed())
 
     def test_update_increments_steps_once(self):

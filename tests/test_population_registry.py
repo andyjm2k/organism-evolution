@@ -117,6 +117,14 @@ class TestPopulationRegistry(unittest.TestCase):
         self.registry.get(genomes[0][0]).energy = 0
         self.assertEqual(len(self.registry.all_organisms()), 2)
 
+    def test_diet_varies_by_genome_id_not_species(self):
+        """Gen-0 monoculture still yields mixed herbivore/carnivore roles."""
+        genomes = list(self.population.population.items())[:8]
+        self.registry.seed_from_genomes(genomes, self.population)
+        diets = {self.registry.get(gid).is_carnivore for gid, _ in genomes}
+        self.assertTrue(True in diets)
+        self.assertTrue(False in diets)
+
 
 if __name__ == "__main__":
     unittest.main()

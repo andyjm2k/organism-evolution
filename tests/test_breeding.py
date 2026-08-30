@@ -168,6 +168,82 @@ class TestEpisodeBreeding(unittest.TestCase):
         # Crossover typically yields a non-empty connection set.
         self.assertGreater(len(child.genome.connections), 0)
 
+    def test_offspring_starts_with_reduced_energy(self):
+        """Born organisms use offspring_starting_energy, not full spawn energy."""
+        config = _load_neat_config()
+        env = _env_config()
+        env["offspring_starting_energy"] = 50
+        env["starting_energy"] = 350
+        parent_a = Organism(
+            _fresh_genome(config),
+            config,
+            (400, 300),
+            env,
+            species_id=2,
+            logging_level="normal",
+        )
+        parent_b = Organism(
+            _fresh_genome(config),
+            config,
+            (405, 300),
+            env,
+            species_id=2,
+            logging_level="normal",
+        )
+        parent_a.energy = 200
+        parent_b.energy = 200
+        parent_a.steps_since_breeding = 200
+        parent_b.steps_since_breeding = 200
+        captured = []
+
+        class StubSimulation:
+            def register_episode_child(self, child):
+                captured.append(child)
+
+        parent_a.simulation = StubSimulation()
+        parent_a._try_breed([parent_b])
+        self.assertEqual(len(captured), 1)
+        self.assertAlmostEqual(captured[0].energy, 50.0)
+        self.assertEqual(captured[0].steps_since_breeding, 0)
+
+    def test_cooldown_resets_after_successful_breed(self):
+        """Parents cannot breed again immediately after producing offspring."""
+        config = _load_neat_config()
+        env = _env_config()
+        parent_a = Organism(
+            _fresh_genome(config),
+            config,
+            (400, 300),
+            env,
+            species_id=2,
+            logging_level="normal",
+        )
+        parent_b = Organism(
+            _fresh_genome(config),
+            config,
+            (405, 300),
+            env,
+            species_id=2,
+            logging_level="normal",
+        )
+        parent_a.energy = 200
+        parent_b.energy = 200
+        parent_a.steps_since_breeding = 200
+        parent_b.steps_since_breeding = 200
+
+        class StubSimulation:
+            def register_episode_child(self, child):
+                pass
+
+        parent_a.simulation = StubSimulation()
+        parent_a._try_breed([parent_b])
+        self.assertFalse(parent_a.can_breed())
+        self.assertFalse(parent_b.can_breed())
+        parent_a.update([], [parent_a])
+        self.assertFalse(parent_a.can_breed())
+        parent_a.steps_since_breeding = 200
+        self.assertTrue(parent_a.can_breed())
+
 
 if __name__ == "__main__":
     unittest.main()
