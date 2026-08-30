@@ -35,25 +35,7 @@ class PygameRenderer(RendererCommon):
         self.screen.fill((255, 255, 255))
         main_width = self.screen.get_width() - self.scoreboard_width
         main_height = self.screen.get_height()
-        breeding_boundary_x = main_width * 0.1
-        breeding_boundary_y = main_height * 0.1
-        breeding_width = main_width - (breeding_boundary_x * 2)
-        breeding_height = main_height - (breeding_boundary_y * 2)
-        breeding_rect = pygame.Rect(
-            breeding_boundary_x,
-            breeding_boundary_y,
-            breeding_width,
-            breeding_height,
-        )
-        pygame.draw.rect(self.screen, (240, 250, 240), breeding_rect, 1)
-        if not hasattr(self, "breeding_zone_text"):
-            self.breeding_zone_text = self.font.render(
-                "Breeding Safe Zone", True, (100, 180, 100)
-            )
-        self.screen.blit(
-            self.breeding_zone_text,
-            (breeding_boundary_x + 5, breeding_boundary_y - 25),
-        )
+        self.draw_breeding_zone(self.screen, main_width, main_height)
 
         render_limit = 500
         if food_items:
