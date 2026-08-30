@@ -43,21 +43,6 @@ class Simulation:
         # Food state for the active trial.
         self.food_items = []
         self.spawn_food()
-        # Optional pygame renderer.
-        self.renderer = None
-        if self.sim_config.get("render", False):
-            from renderer_factory import create_renderer
-
-            screen_size = max(
-                self.sim_config["environment_width"],
-                self.sim_config["environment_height"],
-            )
-            self.renderer = create_renderer(
-                screen_size,
-                logging_level=self.logging_level,
-                backend=self.sim_config.get("render_backend", "pygame"),
-            )
-            self.renderer.set_environment_config(self.environment_config)
         # Shared environment contract consumed by organisms.
         detection = self.sim_config["detection_radius"]
         self.environment_config = {
@@ -78,6 +63,21 @@ class Simulation:
             "food_energy_value": self.sim_config.get("food_energy_value", 75),
             "movement_cost": self.sim_config.get("movement_cost"),
         }
+        # Optional pygame renderer (initialized after environment_config is set).
+        self.renderer = None
+        if self.sim_config.get("render", False):
+            from renderer_factory import create_renderer
+
+            screen_size = max(
+                self.sim_config["environment_width"],
+                self.sim_config["environment_height"],
+            )
+            self.renderer = create_renderer(
+                screen_size,
+                logging_level=self.logging_level,
+                backend=self.sim_config.get("render_backend", "pygame"),
+            )
+            self.renderer.set_environment_config(self.environment_config)
         # Cached loop parameters.
         self.simulation_steps = self.sim_config["simulation_steps"]
         self.detection_radius = detection
