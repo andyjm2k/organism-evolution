@@ -61,6 +61,9 @@ class SelectionScheduler:
                 break
             genome_id = genome.key
             population.population[genome_id] = genome
+            population.species.speciate(
+                neat_config, population.population, population.generation
+            )
             fitness_tracker.init_genome(genome_id)
             organism = registry.spawn_immigrant(genome, population, batch_engine)
             if organism is not None:
@@ -76,6 +79,8 @@ def _create_immigrant_genome(population, neat_config, top_ids):
     if len(top_ids) >= 2 and all(tid in population.population for tid in top_ids):
         parent_a = population.population[top_ids[0]]
         parent_b = population.population[top_ids[1]]
+        parent_a.fitness = parent_a.fitness if parent_a.fitness is not None else 0.0
+        parent_b.fitness = parent_b.fitness if parent_b.fitness is not None else 0.0
         genome.configure_crossover(parent_a, parent_b, neat_config.genome_config)
         genome.mutate(neat_config.genome_config)
     else:

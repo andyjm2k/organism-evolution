@@ -122,6 +122,10 @@ class PopulationRegistry:
         genome_id = genome.key
         x = random.randint(10, max(11, width - 10))
         y = random.randint(10, max(11, height - 10))
+        if genome_id not in population.species.genome_to_species:
+            population.species.speciate(
+                self.neat_config, population.population, population.generation
+            )
         species_id = population.species.get_species_id(genome_id)
         organism = self._make_organism(genome, (x, y), species_id, genome_id)
         if batch_engine is not None:

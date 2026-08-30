@@ -1,6 +1,11 @@
 # NEAT Simulation
 
-This project simulates the genetic evolution of simple cell organisms using the NEAT algorithm. Organisms compete for survival in a petri dish by consuming food and each other, developing traits to gain advantages.
+This project simulates the genetic evolution of simple cell organisms using the NEAT algorithm. Organisms compete for survival by consuming food and each other, developing traits to gain advantages.
+
+Two simulation harnesses are available:
+
+- **Episodic** (default) — fixed-length trials with full world resets; optimized for batch NEAT training
+- **Living world** — persistent ecology with nutrient-cloud food regrowth, steady-state evolution, and a large pannable viewport ([details](docs/LIVING_WORLD.md))
 
 ## Features
 
@@ -10,6 +15,7 @@ This project simulates the genetic evolution of simple cell organisms using the 
 - Terminal dashboard for headless mode
 - 31-channel neural network inputs (food, prey/threat, breeding — nearest + second-nearest)
 - Continuous steering control (angle + speed) with movement trails and click-to-inspect overlays
+- **Living world mode**: 4000×4000 persistent arena, draggable camera, minimap, nutrient clouds, organism genome panel
 
 ## Setup
 
@@ -23,62 +29,70 @@ This project simulates the genetic evolution of simple cell organisms using the 
    pip install -r requirements-gpu.txt
    ```
 
-2. Run headless training (default from JSON):
+2. Run headless episodic training (default):
    ```bash
    python src/main.py
    ```
 
-3. Run with visual rendering:
+3. Run the living world (visual):
+   ```bash
+   python src/main.py harness=living_world
+   ```
+
+4. Run episodic mode with visual rendering:
    ```bash
    python src/main.py render=true
    ```
 
-4. Run with GPU renderer (requires OpenGL display):
+5. Run with GPU renderer (requires OpenGL display):
    ```bash
    python src/main.py render=true render_backend=moderngl
    ```
 
 ## Running Options
 
-CLI flags use `key=value` syntax and override `config/simulation-config.json`:
+CLI flags use `key=value` syntax and override the active config JSON (`simulation-config.json` or `living-world-config.json`):
 
 | Flag | Values | Description |
 |------|--------|-------------|
+| `harness=` | `episodic` / `living_world` | Select simulation harness |
 | `render=` | `true` / `false` | Enable or disable rendering |
-| `render_backend=` | `pygame` / `moderngl` | Software pygame or GPU ModernGL backend |
+| `render_backend=` | `pygame` / `moderngl` | Software pygame or GPU ModernGL backend (episodic only) |
 | `logging=` | `normal` / `detailed` | Console log verbosity during evaluation |
 | `dashboard=` | `minimal` / `normal` / `detailed` | Terminal scoreboard detail level |
 
-**Default training mode is headless** (`"render": false` in JSON) for maximum throughput. Enable visuals explicitly:
+**Default episodic training mode is headless** (`"render": false` in JSON) for maximum throughput. The living world defaults to rendering enabled.
 
 ```bash
 python src/main.py render=true
-python src/main.py render=false dashboard=minimal
+python src/main.py harness=living_world render=false max_world_steps=8000
 python src/main.py logging=detailed dashboard=detailed
 ```
 
-When rendering, `render_stride` in JSON controls how often frames are drawn (default `10` = every 10th sim step), so observation does not force a draw on every physics tick.
+When rendering episodic mode, `render_stride` in JSON controls how often frames are drawn (default `10` = every 10th sim step).
 
-- **With Rendering**: The simulation displays organisms and food in the environment, plus an in-window scoreboard of top species.
-- **Without Rendering (Headless Mode)**: Runs without visual output and prints a terminal dashboard after each generation. Useful for faster runs or servers without a display.
+- **Episodic rendering**: organisms and food fill the window; scoreboard on the right. Click to inspect, **S** for sense rings, **Esc** to clear.
+- **Living world rendering**: 900×900 viewport into a 4000×4000 world. Drag to pan, click organism to track, minimap top-right. See [docs/LIVING_WORLD.md](docs/LIVING_WORLD.md).
+- **Headless mode**: no visual output; terminal dashboard after each generation/epoch.
 
 ## Configuration
 
 - `config/neat-config.ini`: NEAT algorithm settings (**31 network inputs**, 4 outputs)
-- `config/simulation-config.json`: Simulation parameters (arena size, food count, detection radii, energy economy, `batch_inference`, `render_backend`)
+- `config/simulation-config.json`: Episodic harness (arena size, trials, steps, food count, …)
+- `config/living-world-config.json`: Living world harness (world size, viewport, nutrient clouds, steady-state selection, …)
 
-Performance-related JSON keys:
+Performance-related JSON keys (episodic):
 
 - `batch_inference` (default `true`): NumPy-compiled forward passes with parity to NEAT `activate`
 - `render_backend`: `pygame` (default) or `moderngl` (GPU instanced draw; falls back to pygame)
 - `render_stride`: draw every Nth sim step when rendering (default `10`)
 
+Living-world-specific keys include `max_population`, `nutrient_cloud_count`, `food_target_density`, `selection_interval_steps`, and `viewport_width/height`. See [docs/LIVING_WORLD.md](docs/LIVING_WORLD.md) for the full reference.
+
 Legacy JSON keys are still supported:
 
 - `petridish_size` → `environment_width` / `environment_height`
 - `episode_length` → `simulation_steps`
-
-When rendering, use **click** to select an organism, **S** to toggle sense-radius rings, and **Esc** to clear selection. Movement trails fade behind each organism automatically.
 
 ### Neural network input schema (31 channels)
 
@@ -109,6 +123,20 @@ Run the full unit test suite from the repository root:
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+Living-world modules have focused test files:
+
+| Test file | Covers |
+|-----------|--------|
+| `test_living_world.py` | Food ecology, rolling fitness, harness integration |
+| `test_population_registry.py` | Seeding, births, culling, capacity |
+| `test_selection_scheduler.py` | Steady-state cull and immigration |
+| `test_camera.py` | Viewport pan, drag, coordinate transforms |
+| `test_world_clock.py` | Step/epoch counting |
+| `test_genome_viz.py` | Genome graph rendering |
+| `test_main_harness.py` | Harness config loading |
+
+See [docs/LIVING_WORLD.md](docs/LIVING_WORLD.md) for living-world architecture and config reference.
 
 Optional GPU dependencies (for `render_backend=moderngl`):
 
@@ -145,10 +173,10 @@ If ModernGL fails to init, the factory falls back to pygame and logs
 ## Project layout
 
 ```
-config/          NEAT and simulation JSON settings
-docs/            Review plans and bug sweep findings
-src/             Simulation runtime (main, organism, simulation, renderer, …)
-tests/           Unit tests (distance, network inputs, organism, breeding, …)
+config/          NEAT, episodic, and living-world JSON settings
+docs/            Architecture docs (including LIVING_WORLD.md)
+src/             Simulation runtime (main, organism, simulation, living_world, …)
+tests/           Unit tests (distance, network inputs, organism, living world, …)
 ```
 
 ## License
