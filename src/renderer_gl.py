@@ -290,7 +290,7 @@ class ModernGLRenderer(RendererCommon):
         width, height = overlay.get_size()
         self._blit_panel_texture(self._overlay_texture, 0, 0, width, height)
 
-    def _draw_food(self, food_items):
+    def _draw_selection_overlay(self, organisms):
         """Rasterize sense rings and selection highlight above organisms."""
         if not organisms or self.selected_organism is None:
             return
