@@ -54,7 +54,10 @@ class TestModernGLRendererSmoke(unittest.TestCase):
             energy=100.0,
             species_id=1,
             is_carnivore=False,
+            num_spikes=5,
+            spike_length=4.0,
             get_radius=lambda: 8.0,
+            get_active_node_count=lambda: 12,
         )
         result = self.renderer.render([organism], [food])
         self.assertTrue(result)
@@ -69,6 +72,16 @@ class TestModernGLRendererSmoke(unittest.TestCase):
         self.renderer.cleanup_resources(light=False)
         self.assertIsNone(self.renderer._scoreboard_texture)
         self.assertIsNone(self.renderer._hud_texture)
+        self.assertEqual(len(self.renderer._gl_sprite_textures), 0)
+
+    def test_sprite_shader_sources_present(self):
+        """GPU renderer should use circle and sprite shader programs."""
+        source_file = Path(__file__).resolve().parents[1] / "src" / "renderer_gl.py"
+        with open(source_file, "r", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertIn("_CIRCLE_FRAGMENT_SHADER", content)
+        self.assertIn("_SPRITE_FRAGMENT_SHADER", content)
+        self.assertIn("draw_breeding_zone", content)
 
     def test_texture_writes_do_not_flip(self):
         """Verify textures are written without vertical flipping."""

@@ -40,6 +40,31 @@ class TestScoreboard(unittest.TestCase):
         Scoreboard.set_dashboard_level("minimal")
         self.assertEqual(Scoreboard._dashboard_level, "minimal")
 
+    def test_display_dashboard_uses_active_species_from_stats(self):
+        """Terminal dashboard should show active species from generation stats."""
+        org_one = _organism_stub(is_carnivore=False)
+        org_two = _organism_stub(is_carnivore=True)
+        Scoreboard.record_species("1", org_one, fitness=100, generation=1, config=None)
+        Scoreboard.record_species("2", org_two, fitness=90, generation=1, config=None)
+        stats = {
+            "active_species": 2,
+            "carnivores": 1,
+            "herbivores": 1,
+        }
+        import io
+        from contextlib import redirect_stdout
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            Scoreboard.display_terminal_dashboard(
+                generation=1,
+                dashboard_level="normal",
+                generation_stats=stats,
+            )
+        output = buffer.getvalue()
+        self.assertIn("Active Species: 2", output)
+        self.assertIn("Total Evolved: 2", output)
+
 
 if __name__ == "__main__":
     unittest.main()

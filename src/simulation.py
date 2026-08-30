@@ -301,16 +301,25 @@ class Simulation:
         ]
         if survivors:
             best = max(survivors, key=lambda org: org.highest_fitness)
-            Scoreboard.record_species(
-                species_id=str(best.species_id),
-                organism=best,
-                fitness=best.highest_fitness,
-                generation=self.population.generation,
-                config=self.neat_config,
-            )
+            active_species = {}
+            for organism in survivors:
+                species_key = str(organism.species_id)
+                existing = active_species.get(species_key)
+                if existing is None or organism.highest_fitness > existing.highest_fitness:
+                    active_species[species_key] = organism
+            generation = self.population.generation
+            for species_id, representative in active_species.items():
+                Scoreboard.record_species(
+                    species_id=species_id,
+                    organism=representative,
+                    fitness=representative.highest_fitness,
+                    generation=generation,
+                    config=self.neat_config,
+                )
             # Snapshot primitive stats before organisms are cleaned.
             self._last_generation_stats = {
                 "count": len(survivors),
+                "active_species": len(active_species),
                 "carnivores": sum(1 for o in survivors if o.is_carnivore),
                 "herbivores": sum(1 for o in survivors if not o.is_carnivore),
                 "avg_fitness": sum(o.highest_fitness for o in survivors)
@@ -342,6 +351,7 @@ class Simulation:
         log_always("=== Generation Evaluation ===")
         log_always(f"Generation: {generation}")
         log_always(f"Number of organisms: {stats['count']}")
+        log_always(f"Active Species: {stats['active_species']}")
         log_always(
             f"Organism Types: {stats['carnivores']} Carnivores, "
             f"{stats['herbivores']} Herbivores"
@@ -425,7 +435,9 @@ class Simulation:
             log_always(f"Number of genomes with positive fitness: {positive}")
             if self._last_generation_stats:
                 Scoreboard.display_terminal_dashboard(
-                    gen, dashboard_level=self.dashboard_level
+                    gen,
+                    dashboard_level=self.dashboard_level,
+                    generation_stats=self._last_generation_stats,
                 )
             else:
                 log_always("Warning: No organisms survived this generation")

@@ -88,6 +88,47 @@ class RendererCommon:
         """Toggle sense-radius rings for the selected organism."""
         self.show_sense_rings = not self.show_sense_rings
 
+    def count_active_species(self, organisms):
+        """Count unique NEAT species among live organisms."""
+        if not organisms:
+            return 0
+        return len({org.species_id for org in organisms if org.energy > 0})
+
+    def build_hud_text(self, organisms, food_items, generation):
+        """Build HUD text shared by CPU and GPU renderers."""
+        food_count = len(food_items) if food_items else 0
+        species_count = self.count_active_species(organisms)
+        return (
+            f"Food: {food_count} | Gen: {generation} | "
+            f"Species: {species_count}"
+        )
+
+    def draw_breeding_zone(self, surface, arena_width, arena_height):
+        """Draw the inner breeding safe zone border and label."""
+        breeding_boundary_x = arena_width * 0.1
+        breeding_boundary_y = arena_height * 0.1
+        breeding_width = arena_width - (breeding_boundary_x * 2)
+        breeding_height = arena_height - (breeding_boundary_y * 2)
+        breeding_rect = pygame.Rect(
+            breeding_boundary_x,
+            breeding_boundary_y,
+            breeding_width,
+            breeding_height,
+        )
+        pygame.draw.rect(surface, (240, 250, 240), breeding_rect, 1)
+        if "breeding_zone_text" not in self.text_surfaces:
+            self.text_surfaces["breeding_zone_text"] = self.font.render(
+                "Breeding Safe Zone", True, (100, 180, 100)
+            )
+        surface.blit(
+            self.text_surfaces["breeding_zone_text"],
+            (breeding_boundary_x + 5, breeding_boundary_y - 25),
+        )
+
+    def organism_sprite_cache_key(self, species_id, is_carnivore, radius, num_spikes, spike_length):
+        """Return the cache key used for species organism sprites."""
+        return f"{species_id}_{is_carnivore}_{radius}_{num_spikes}_{spike_length}"
+
     def draw_movement_trails(self, surface, organisms):
         """Draw fading polylines for recent organism movement."""
         for organism in organisms:
@@ -274,8 +315,8 @@ class RendererCommon:
         """Return a cached pygame surface for a species icon."""
         import math
 
-        cache_key = (
-            f"{species_id}_{is_carnivore}_{radius}_{num_spikes}_{spike_length}"
+        cache_key = self.organism_sprite_cache_key(
+            species_id, is_carnivore, radius, num_spikes, spike_length
         )
         if cache_key not in self.species_surfaces:
             surface_size = max(20, int(radius * 4))
