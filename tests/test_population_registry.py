@@ -117,13 +117,19 @@ class TestPopulationRegistry(unittest.TestCase):
         self.registry.get(genomes[0][0]).energy = 0
         self.assertEqual(len(self.registry.all_organisms()), 2)
 
-    def test_diet_varies_by_genome_id_not_species(self):
-        """Gen-0 monoculture still yields mixed herbivore/carnivore roles."""
-        genomes = list(self.population.population.items())[:8]
-        self.registry.seed_from_genomes(genomes, self.population)
-        diets = {self.registry.get(gid).is_carnivore for gid, _ in genomes}
-        self.assertTrue(True in diets)
-        self.assertTrue(False in diets)
+    def test_diet_stable_within_species(self):
+        """Organisms in the same species share a carnivore/herbivore role."""
+        genome_id, genome = next(iter(self.population.population.items()))
+        org_a = self.registry._make_organism(genome, (10, 10), 4, genome_id)
+        org_b = self.registry._make_organism(genome, (20, 20), 4, genome_id + 1)
+        self.assertEqual(org_a.is_carnivore, org_b.is_carnivore)
+
+    def test_diet_differs_across_species(self):
+        """Different species ids can map to different diets."""
+        genome_id, genome = next(iter(self.population.population.items()))
+        herbivore = self.registry._make_organism(genome, (10, 10), 1, genome_id)
+        carnivore = self.registry._make_organism(genome, (20, 20), 3, genome_id + 1)
+        self.assertNotEqual(herbivore.is_carnivore, carnivore.is_carnivore)
 
 
 if __name__ == "__main__":

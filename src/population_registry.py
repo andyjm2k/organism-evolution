@@ -29,13 +29,15 @@ class PopulationRegistry:
             x = random.randint(10, max(11, width - 10))
             y = random.randint(10, max(11, height - 10))
             species_id = population.species.get_species_id(genome_id)
-            organism = self._make_organism(genome, (x, y), species_id, genome_id)
+            organism = self._make_organism(
+                genome, (x, y), species_id, genome_id, diet_key=species_id
+            )
             if batch_engine is not None:
                 batch_engine.register_genome(genome_id, genome, self.neat_config)
                 organism._compiled_network = batch_engine._networks[genome_id]
             self._organisms[genome_id] = organism
 
-    def _make_organism(self, genome, position, species_id, genome_id):
+    def _make_organism(self, genome, position, species_id, genome_id, diet_key=None):
         """Construct one organism and attach metadata."""
         organism = Organism(
             genome,
@@ -43,11 +45,11 @@ class PopulationRegistry:
             position,
             self.environment_config,
             species_id=species_id,
-            diet_key=genome_id,
+            diet_key=diet_key if diet_key is not None else species_id,
             logging_level=self.logging_level,
         )
         organism.genome_id = genome_id
-        organism._diet_key = genome_id
+        organism._diet_key = diet_key if diet_key is not None else species_id
         organism._inference_genome_id = genome_id
         return organism
 
