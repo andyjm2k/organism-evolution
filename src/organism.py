@@ -398,15 +398,18 @@ class Organism:
             species_id=self.species_id,
             logging_level=self.logging_level,
         )
-        # Register only with the live episode list via simulation hook.
+        # Living-world harness integrates births into the gene pool.
         if self.simulation is not None:
-            self.simulation.register_episode_child(child)
-            self.fitness_bonus += 100
-            partner.fitness_bonus += 100
-            log_detailed(
-                self.logging_level,
-                f"Breeding produced episode-local child in species {self.species_id}",
-            )
+            if hasattr(self.simulation, "register_birth"):
+                self.simulation.register_birth(child, child_genome, self, partner)
+            else:
+                self.simulation.register_episode_child(child)
+                self.fitness_bonus += 100
+                partner.fitness_bonus += 100
+                log_detailed(
+                    self.logging_level,
+                    f"Breeding produced episode-local child in species {self.species_id}",
+                )
         else:
             # Refund if we cannot place the child anywhere.
             self.energy += 50
