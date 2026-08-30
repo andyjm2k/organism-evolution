@@ -14,19 +14,42 @@ from simulation import Simulation
 
 def _project_root():
     """Return the repository root (parent of src/)."""
-    # main.py lives in src/; configs live one level up.
     return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
+def _parse_harness_mode():
+    """Read optional harness= CLI override."""
+    for arg in sys.argv[1:]:
+        lowered = arg.lower()
+        if lowered.startswith("harness="):
+            return arg.split("=", 1)[1].lower()
+    return None
+
+
+def _load_sim_config(root, harness_mode=None):
+    """Load episodic or living-world JSON configuration."""
+    if harness_mode is None:
+        harness_mode = "episodic"
+    config_name = (
+        "living-world-config.json"
+        if harness_mode == "living_world"
+        else "simulation-config.json"
+    )
+    sim_config_path = os.path.join(root, "config", config_name)
+    with open(sim_config_path, encoding="utf-8") as handle:
+        sim_config = json.load(handle)
+    sim_config["harness_mode"] = harness_mode
+    return sim_config
+
+
 def run_simulation(render=None, logging_level=None, dashboard_level=None):
-    """Parse CLI flags, load configs, and run the NEAT simulation."""
-    # Track CLI overrides separately so JSON defaults remain authoritative.
+    """Parse CLI flags, load configs, and run the selected simulation harness."""
     render_override = None
     logging_override = None
     dashboard_override = None
     render_backend_override = None
     batch_inference_override = None
-    # Parse simple key=value CLI overrides.
+    harness_mode = _parse_harness_mode()
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
             lowered = arg.lower()
@@ -42,12 +65,9 @@ def run_simulation(render=None, logging_level=None, dashboard_level=None):
                 batch_inference_override = arg.split("=", 1)[1].lower() == "true"
 
     root = _project_root()
-    # Load simulation JSON relative to the project root (CWD-independent).
-    sim_config_path = os.path.join(root, "config", "simulation-config.json")
-    with open(sim_config_path, encoding="utf-8") as handle:
-        sim_config = json.load(handle)
+    sim_config = _load_sim_config(root, harness_mode)
+    harness_mode = sim_config.get("harness_mode", "episodic")
 
-    # Prefer CLI, then explicit function args, then JSON (training defaults headless).
     if render_override is not None:
         render = render_override
     elif render is None:
@@ -65,22 +85,21 @@ def run_simulation(render=None, logging_level=None, dashboard_level=None):
     if batch_inference_override is not None:
         sim_config["batch_inference"] = batch_inference_override
 
-    # Apply resolved options into the live config.
     sim_config["render"] = render
     sim_config["logging_level"] = logging_level
     sim_config["dashboard_level"] = dashboard_level
     sim_config["screen"] = None
-    # Only initialize pygame when a display will be used (A-2 headless skip).
+
     if render:
         pygame.init()
     else:
         log_always("=== Running Simulation in Headless Mode ===")
         log_always("Rendering disabled. Species dashboard will use the terminal.")
 
+    log_always(f"Harness: {harness_mode}")
     log_always(f"Logging level: {logging_level.upper()}")
     log_always(f"Dashboard level: {dashboard_level.upper()}")
 
-    # Load NEAT configuration from the project config directory.
     neat_config_path = os.path.join(root, "config", "neat-config.ini")
     neat_config = neat.Config(
         neat.DefaultGenome,
@@ -90,9 +109,13 @@ def run_simulation(render=None, logging_level=None, dashboard_level=None):
         neat_config_path,
     )
 
-    # Reset scoreboard state for a fresh run.
     Scoreboard.initialize(dashboard_level=dashboard_level)
-    simulation = Simulation(neat_config, sim_config)
+    if harness_mode == "living_world":
+        from living_world import LivingWorldSimulation
+
+        simulation = LivingWorldSimulation(neat_config, sim_config)
+    else:
+        simulation = Simulation(neat_config, sim_config)
 
     try:
         simulation.run()
@@ -100,7 +123,6 @@ def run_simulation(render=None, logging_level=None, dashboard_level=None):
         log_always("Simulation stopped by user")
     finally:
         log_always("Performing final cleanup...")
-        # Drain events and quit pygame only when it was initialized.
         if pygame.get_init():
             if pygame.display.get_init():
                 pygame.event.get()
