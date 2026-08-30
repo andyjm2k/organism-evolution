@@ -16,12 +16,12 @@ in vec2 in_corner;
 in vec2 in_center;
 in float in_radius;
 in vec3 in_color;
-uniform vec2 u_arena_size;
+uniform vec2 u_screen_size;
 out vec3 v_color;
 out vec2 v_local;
 void main() {
     vec2 world = in_center + in_corner * in_radius;
-    vec2 ndc = (world / u_arena_size) * 2.0 - 1.0;
+    vec2 ndc = (world / u_screen_size) * 2.0 - 1.0;
     ndc.y = -ndc.y;
     gl_Position = vec4(ndc, 0.0, 1.0);
     v_color = in_color;
@@ -50,11 +50,11 @@ _SPRITE_VERTEX_SHADER = """
 in vec2 in_corner;
 in vec2 in_center;
 in float in_half_size;
-uniform vec2 u_arena_size;
+uniform vec2 u_screen_size;
 out vec2 v_uv;
 void main() {
     vec2 world = in_center + in_corner * in_half_size;
-    vec2 ndc = (world / u_arena_size) * 2.0 - 1.0;
+    vec2 ndc = (world / u_screen_size) * 2.0 - 1.0;
     ndc.y = -ndc.y;
     gl_Position = vec4(ndc, 0.0, 1.0);
     v_uv = in_corner * 0.5 + 0.5;
@@ -183,6 +183,11 @@ class ModernGLRenderer(RendererCommon):
         self.clock.tick(60)
         return True
 
+    def _set_world_shader_screen_size(self, program):
+        """Match overlay blit coordinates: arena width plus scoreboard panel."""
+        screen_w, screen_h = self.screen.get_size()
+        program["u_screen_size"].value = (float(screen_w), float(screen_h))
+
     def _draw_food(self, food_items):
         """Draw food pellets as instanced green circles."""
         if not food_items:
@@ -209,10 +214,7 @@ class ModernGLRenderer(RendererCommon):
             )
         if not instances:
             return
-        self._circle_prog["u_arena_size"].value = (
-            float(self.arena_size),
-            float(self.arena_size),
-        )
+        self._set_world_shader_screen_size(self._circle_prog)
         data = struct.pack(f"{len(instances)}f", *instances)
         if self._instance_vbo.size < len(data):
             self._instance_vbo.orphan(size=len(data))
@@ -224,10 +226,7 @@ class ModernGLRenderer(RendererCommon):
         if not organisms:
             return
         render_limit = 500
-        self._sprite_prog["u_arena_size"].value = (
-            float(self.arena_size),
-            float(self.arena_size),
-        )
+        self._set_world_shader_screen_size(self._sprite_prog)
         for organism in organisms[:render_limit]:
             if organism.position is None or organism.energy <= 0:
                 continue
