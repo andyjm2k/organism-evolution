@@ -51,6 +51,31 @@ class TestRendererCommon(unittest.TestCase):
         self.assertIn("breeding_zone_text", self.common.text_surfaces)
         self.assertGreater(surface.get_at((40, 40))[3], 0)
 
+    def test_count_active_species_ignores_dead_organisms(self):
+        """Active species count should include only living organisms."""
+        from types import SimpleNamespace
+
+        organisms = [
+            SimpleNamespace(species_id=1, energy=100),
+            SimpleNamespace(species_id=2, energy=100),
+            SimpleNamespace(species_id=3, energy=0),
+        ]
+        self.assertEqual(self.common.count_active_species(organisms), 2)
+
+    def test_build_hud_text_matches_active_species(self):
+        """HUD text should report the same active species count as the dashboard."""
+        from types import SimpleNamespace
+
+        organisms = [
+            SimpleNamespace(species_id=1, energy=50),
+            SimpleNamespace(species_id=2, energy=50),
+        ]
+        food = [SimpleNamespace(), SimpleNamespace(), SimpleNamespace()]
+        text = self.common.build_hud_text(organisms, food, generation=11)
+        self.assertIn("Species: 2", text)
+        self.assertIn("Gen: 11", text)
+        self.assertIn("Food: 3", text)
+
 
 if __name__ == "__main__":
     unittest.main()

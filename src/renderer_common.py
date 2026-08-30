@@ -88,6 +88,21 @@ class RendererCommon:
         """Toggle sense-radius rings for the selected organism."""
         self.show_sense_rings = not self.show_sense_rings
 
+    def count_active_species(self, organisms):
+        """Count unique NEAT species among live organisms."""
+        if not organisms:
+            return 0
+        return len({org.species_id for org in organisms if org.energy > 0})
+
+    def build_hud_text(self, organisms, food_items, generation):
+        """Build HUD text shared by CPU and GPU renderers."""
+        food_count = len(food_items) if food_items else 0
+        species_count = self.count_active_species(organisms)
+        return (
+            f"Food: {food_count} | Gen: {generation} | "
+            f"Species: {species_count}"
+        )
+
     def draw_breeding_zone(self, surface, arena_width, arena_height):
         """Draw the inner breeding safe zone border and label."""
         breeding_boundary_x = arena_width * 0.1

@@ -81,11 +81,20 @@ class Scoreboard:
         return cls._species_records
 
     @classmethod
-    def display_terminal_dashboard(cls, generation=None, dashboard_level=None):
+    def display_terminal_dashboard(
+        cls, generation=None, dashboard_level=None, generation_stats=None
+    ):
         """Print the terminal species dashboard."""
         level = dashboard_level or cls._dashboard_level or "normal"
         species_limit = 5 if level == "minimal" else 10
         top_species = cls.get_top_species(species_limit)
+        active_species = None
+        active_carnivores = None
+        active_herbivores = None
+        if generation_stats:
+            active_species = generation_stats.get("active_species")
+            active_carnivores = generation_stats.get("carnivores")
+            active_herbivores = generation_stats.get("herbivores")
 
         if level == "minimal":
             print("\n" + "=" * 80)
@@ -96,10 +105,16 @@ class Scoreboard:
             )
             print(" " * 25 + title)
             print("=" * 80)
-            print(
-                f"Total Species: {len(cls._species_records)} | "
-                f"Top Species: {len(top_species)}"
-            )
+            if active_species is not None:
+                print(
+                    f"Active Species: {active_species} | "
+                    f"Total Evolved: {len(cls._species_records)}"
+                )
+            else:
+                print(
+                    f"Total Species: {len(cls._species_records)} | "
+                    f"Top Species: {len(top_species)}"
+                )
             if top_species:
                 _sid, best = top_species[0]
                 print(
@@ -119,14 +134,22 @@ class Scoreboard:
         print(" " * 30 + title)
         print("=" * 100)
 
-        total = len(cls._species_records)
-        carnivores = sum(
-            1 for record in cls._species_records.values() if record["is_carnivore"]
-        )
-        print(
-            f"Total Species: {total} | Carnivores: {carnivores} | "
-            f"Herbivores: {total - carnivores}"
-        )
+        if active_species is not None:
+            print(
+                f"Active Species: {active_species} | "
+                f"Carnivores: {active_carnivores} | "
+                f"Herbivores: {active_herbivores} | "
+                f"Total Evolved: {len(cls._species_records)}"
+            )
+        else:
+            total = len(cls._species_records)
+            carnivores = sum(
+                1 for record in cls._species_records.values() if record["is_carnivore"]
+            )
+            print(
+                f"Total Species: {total} | Carnivores: {carnivores} | "
+                f"Herbivores: {total - carnivores}"
+            )
         print("-" * 100)
         print(
             f"{'Rank':<4} {'Species Name':<30} {'Type':<10} {'Fitness':<12} "

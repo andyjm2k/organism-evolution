@@ -333,15 +333,15 @@ class ModernGLRenderer(RendererCommon):
         """Draw cached HUD text in the top-left arena corner."""
         if not organisms:
             return
-        species_count = len(set(org.species_id for org in organisms))
+        species_count = self.count_active_species(organisms)
         food_count = len(food_items) if food_items else 0
         hud_key = (food_count, self.generation, species_count)
         if self._hud_key != hud_key:
-            debug_text = (
-                f"Food: {food_count} | Gen: {self.generation} | "
-                f"Species: {species_count}"
+            hud_surface = self.font.render(
+                self.build_hud_text(organisms, food_items, self.generation),
+                True,
+                self.colors["text"],
             )
-            hud_surface = self.font.render(debug_text, True, self.colors["text"])
             hud_surface = hud_surface.convert_alpha()
             self._hud_surface = hud_surface
             self._hud_key = hud_key
