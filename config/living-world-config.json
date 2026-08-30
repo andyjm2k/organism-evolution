@@ -34,6 +34,12 @@
     "breeding_cooldown": 200,
     "offspring_starting_energy": 50,
 
+    "genesis_archetype_count": 8,
+    "genesis_extra_hidden_nodes": 6,
+    "genesis_extra_connections": 20,
+    "genesis_weight_jitter": 0.05,
+    "genesis_foraging_bias": 0.35,
+
     "fitness_offspring_weight": 500,
     "fitness_survival_weight": 0.5,
     "fitness_food_weight": 15,

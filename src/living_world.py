@@ -8,6 +8,7 @@ import pygame
 
 from distance import within_radius
 from food_ecology import FoodEcology
+from genome_bootstrap import bootstrap_population
 from living_world_renderer import LivingWorldRenderer
 from logging_util import log_always, log_detailed
 from organism import Organism
@@ -225,6 +226,7 @@ class LivingWorldSimulation:
             self.fitness_tracker,
             self._batch_engine,
             self.neat_config,
+            self.sim_config,
         )
         for organism in self.registry.all_organisms():
             organism.simulation = self
@@ -247,6 +249,7 @@ class LivingWorldSimulation:
         """Start the continuous living-world loop."""
         self.population = neat.Population(self.neat_config)
         self.population.add_reporter(neat.StdOutReporter(True))
+        bootstrap_population(self.population, self.neat_config, self.sim_config)
         genomes = list(self.population.population.items())
         self.registry.seed_from_genomes(
             genomes, self.population, self._batch_engine

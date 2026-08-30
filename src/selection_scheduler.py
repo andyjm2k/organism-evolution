@@ -2,6 +2,7 @@
 
 import random
 
+from genome_bootstrap import bootstrap_immigrant_genome
 from logging_util import log_always
 
 
@@ -22,13 +23,21 @@ class SelectionScheduler:
         """True on selection interval boundaries (excluding step zero)."""
         return step > 0 and step % self.interval_steps == 0
 
-    def run(self, population, registry, fitness_tracker, batch_engine, neat_config):
+    def run(
+        self, population, registry, fitness_tracker, batch_engine, neat_config, sim_config=None
+    ):
         """Cull weak organisms and inject offspring of top performers."""
         alive = registry.alive_organisms()
         if not alive:
             log_always("Selection: population extinct — reseeding immigrants")
             self._inject_immigrants(
-                population, registry, fitness_tracker, batch_engine, neat_config, 5
+                population,
+                registry,
+                fitness_tracker,
+                batch_engine,
+                neat_config,
+                sim_config,
+                5,
             )
             return
         fitness_tracker.apply_to_genomes(population.population)
@@ -42,11 +51,24 @@ class SelectionScheduler:
         if deficit > 0 and random.random() < self.immigration_rate:
             inject = min(deficit, max(1, int(deficit * 0.3)))
             self._inject_immigrants(
-                population, registry, fitness_tracker, batch_engine, neat_config, inject
+                population,
+                registry,
+                fitness_tracker,
+                batch_engine,
+                neat_config,
+                sim_config,
+                inject,
             )
 
     def _inject_immigrants(
-        self, population, registry, fitness_tracker, batch_engine, neat_config, count
+        self,
+        population,
+        registry,
+        fitness_tracker,
+        batch_engine,
+        neat_config,
+        sim_config,
+        count,
     ):
         """Spawn crossover offspring or random genomes into open world slots."""
         created = 0
@@ -55,7 +77,7 @@ class SelectionScheduler:
             if registry.at_capacity():
                 break
             genome = _create_immigrant_genome(
-                population, neat_config, top_ids
+                population, neat_config, top_ids, sim_config
             )
             if genome is None:
                 break
@@ -72,17 +94,21 @@ class SelectionScheduler:
             log_always(f"Selection: injected {created} immigrant organisms")
 
 
-def _create_immigrant_genome(population, neat_config, top_ids):
-    """Build a mutated crossover child or a fresh random genome."""
+def _create_immigrant_genome(population, neat_config, top_ids, sim_config=None):
+    """Build a mutated crossover child or a fresh enhanced random genome."""
     genome_id = max(population.population.keys(), default=0) + 1
-    genome = neat_config.genome_type(genome_id)
     if len(top_ids) >= 2 and all(tid in population.population for tid in top_ids):
+        genome = neat_config.genome_type(genome_id)
         parent_a = population.population[top_ids[0]]
         parent_b = population.population[top_ids[1]]
         parent_a.fitness = parent_a.fitness if parent_a.fitness is not None else 0.0
         parent_b.fitness = parent_b.fitness if parent_b.fitness is not None else 0.0
         genome.configure_crossover(parent_a, parent_b, neat_config.genome_config)
         genome.mutate(neat_config.genome_config)
-    else:
-        genome.configure_new(neat_config.genome_config)
+        for connection in genome.connections.values():
+            connection.enabled = True
+        genome.key = genome_id
+        return genome
+    genome = bootstrap_immigrant_genome(neat_config, sim_config)
+    genome.key = genome_id
     return genome
