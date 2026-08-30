@@ -107,6 +107,15 @@ class TestModernGLRendererSmoke(unittest.TestCase):
         self.assertNotIn('pygame.image.tostring(hud_surface, "RGBA", True)', content,
                         "Should not flip HUD texture")
 
+    def test_world_shaders_use_full_screen_width(self):
+        """Entity NDC mapping must match overlay blit (arena + scoreboard width)."""
+        source_file = Path(__file__).resolve().parents[1] / "src" / "renderer_gl.py"
+        content = source_file.read_text(encoding="utf-8")
+        self.assertIn("uniform vec2 u_screen_size;", content)
+        self.assertIn("_set_world_shader_screen_size", content)
+        self.assertNotIn("u_arena_size", content,
+                         "World-space shaders should not map X using arena width alone")
+
 
 class TestModernGLRendererHeadlessSkip(unittest.TestCase):
     """Verify skip helper behaves predictably on this host."""
