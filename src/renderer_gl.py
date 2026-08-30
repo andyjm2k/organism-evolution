@@ -180,7 +180,7 @@ class ModernGLRenderer(RendererCommon):
                 self._overlay_texture.release()
             self._overlay_texture = self.ctx.texture((width, height), 4)
             self._overlay_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
-        self._overlay_texture.write(pygame.image.tostring(overlay, "RGBA", True))
+        self._overlay_texture.write(pygame.image.tostring(overlay, "RGBA", False))
         self._blit_panel_texture(self._overlay_texture, 0, 0, width, height)
 
     def _draw_scoreboard_panel(self):
@@ -196,7 +196,7 @@ class ModernGLRenderer(RendererCommon):
                 self._scoreboard_texture.release()
             self._scoreboard_texture = self.ctx.texture(surface.get_size(), 4)
             self._scoreboard_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
-        self._scoreboard_texture.write(pygame.image.tostring(surface, "RGBA", True))
+        self._scoreboard_texture.write(pygame.image.tostring(surface, "RGBA", False))
         self._blit_panel_texture(self._scoreboard_texture, self.arena_size, 0, width, height)
 
     def _draw_hud(self, organisms, food_items):
@@ -222,7 +222,7 @@ class ModernGLRenderer(RendererCommon):
             if self._hud_texture is not None:
                 self._hud_texture.release()
             self._hud_texture = self.ctx.texture(hud_surface.get_size(), 4)
-        self._hud_texture.write(pygame.image.tostring(hud_surface, "RGBA", True))
+        self._hud_texture.write(pygame.image.tostring(hud_surface, "RGBA", False))
         self._blit_panel_texture(self._hud_texture, 10, 10, width, height)
 
     def _blit_panel_texture(self, texture, x, y, width, height):

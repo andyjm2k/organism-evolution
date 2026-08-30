@@ -70,6 +70,30 @@ class TestModernGLRendererSmoke(unittest.TestCase):
         self.assertIsNone(self.renderer._scoreboard_texture)
         self.assertIsNone(self.renderer._hud_texture)
 
+    def test_texture_writes_do_not_flip(self):
+        """Verify textures are written without vertical flipping."""
+        # Check renderer_gl.py source code for correct flip parameter
+        source_file = Path(__file__).resolve().parents[1] / "src" / "renderer_gl.py"
+        with open(source_file, 'r') as f:
+            content = f.read()
+        
+        # All texture writes should use False for the flip parameter
+        # to avoid double-flipping with OpenGL coordinate system
+        self.assertIn('pygame.image.tostring(overlay, "RGBA", False)', content,
+                     "Overlay texture should not be flipped")
+        self.assertIn('pygame.image.tostring(surface, "RGBA", False)', content,
+                     "Scoreboard texture should not be flipped")
+        self.assertIn('pygame.image.tostring(hud_surface, "RGBA", False)', content,
+                     "HUD texture should not be flipped")
+        
+        # Ensure we're not using True anywhere for texture writes
+        self.assertNotIn('pygame.image.tostring(overlay, "RGBA", True)', content,
+                        "Should not flip overlay texture")
+        self.assertNotIn('pygame.image.tostring(surface, "RGBA", True)', content,
+                        "Should not flip scoreboard texture")
+        self.assertNotIn('pygame.image.tostring(hud_surface, "RGBA", True)', content,
+                        "Should not flip HUD texture")
+
 
 class TestModernGLRendererHeadlessSkip(unittest.TestCase):
     """Verify skip helper behaves predictably on this host."""

@@ -156,6 +156,42 @@ class TestSimulation(unittest.TestCase):
         self.assertIn("height", simulation_render.environment_config)
         self.assertIsNotNone(simulation_render.renderer)
 
+    def test_neat_config_min_species_size_prevents_population_conflict(self):
+        """NEAT config should have min_species_size set to prevent population size conflicts."""
+        # Load NEAT config from the project config directory.
+        root = Path(__file__).resolve().parents[1]
+        neat_config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            str(root / "config" / "neat-config.ini"),
+        )
+        # min_species_size should be 1 to allow small species.
+        self.assertEqual(neat_config.reproduction_config.min_species_size, 1)
+        # Verify population size is reasonable.
+        self.assertEqual(neat_config.pop_size, 50)
+        # Create a simulation and verify evaluation works without RuntimeError.
+        sim_config = {
+            "environment_width": 200,
+            "environment_height": 200,
+            "num_food_items": 4,
+            "simulation_steps": 5,
+            "detection_radius": 80,
+            "num_generations": 1,
+            "render": False,
+            "logging_level": "normal",
+        }
+        simulation = Simulation(neat_config, sim_config)
+        population = neat.Population(neat_config)
+        simulation.population = population
+        # Evaluate a small subset - should not raise RuntimeError about population size.
+        genomes = list(population.population.items())[:8]
+        try:
+            simulation.eval_genomes(genomes, neat_config)
+        except RuntimeError as e:
+            self.fail(f"NEAT configuration conflict: {e}")
+
 
 if __name__ == "__main__":
     unittest.main()
