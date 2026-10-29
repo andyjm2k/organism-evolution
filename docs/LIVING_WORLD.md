@@ -102,7 +102,7 @@ See `config/living-world-config.json` for defaults. Important keys:
 
 ### Feeding and breeding
 
-Organisms walk toward sensed food, and toward a mate only when they are already fed and close to a meal. Ready mates within `breeding_detection_radius` can breed, and offspring keep the parent's diet so a herbivore lineage keeps eating plants. Connection count still sets body size, so founders start unconnected and gain structure when they reproduce.
+Movement and the decision to breed come from the four network outputs. Founders share one starting genome: sensed food and prey directions drive velocity more strongly than a mate direction, the breed output begins willing, and the rest output begins off. Births inherit that wiring and mutate it. Eating, energy, and the breeding cooldown stay physical limits. Offspring keep the parent's diet, and founders are herbivores so the lineage can eat the plants in the world.
 
 ### Genesis bootstrap
 

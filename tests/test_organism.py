@@ -10,6 +10,7 @@ import neat
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from food import Food
+from genome_bootstrap import install_founding_motif
 from organism import Organism
 
 
@@ -110,14 +111,53 @@ class TestOrganism(unittest.TestCase):
         organism.steps_since_breeding = 200
         self.assertTrue(organism.can_breed())
 
-    def test_herbivore_walks_toward_sensed_food(self):
-        """A sensed pellet pulls the organism toward it without a trained net."""
-        organism = _make_organism(is_carnivore=False, position=(200, 200))
+    def test_founding_wiring_walks_toward_sensed_food(self):
+        """The shared starting genome, not a reflex, moves toward food dx."""
+        config = _load_neat_config()
+        population = neat.Population(config)
+        _genome_id, genome = next(iter(population.population.items()))
+        install_founding_motif(genome, config.genome_config)
+        env = {
+            "width": 800,
+            "height": 600,
+            "detection_radius": 200,
+            "food_detection_radius": 300,
+            "threat_detection_radius": 100,
+            "breeding_detection_radius": 150,
+            "boundary_penalty": 0.5,
+            "starting_energy": 150,
+            "food_energy_value": 40,
+            "movement_cost": 0.05,
+        }
+        organism = Organism(
+            genome,
+            config,
+            (200, 200),
+            env,
+            species_id=1,
+            diet_key=1,
+            logging_level="normal",
+        )
         food = Food(280, 200)
         start_x = organism.position[0]
         for _ in range(25):
             organism.take_action([food], [], [], [])
         self.assertGreater(organism.position[0], start_x + 4)
+
+    def test_unwired_genome_does_not_chase_food(self):
+        """Without founding wires, food position does not steer the body."""
+        organism = _make_organism(is_carnivore=False, position=(200, 200))
+        for node in organism.genome.nodes.values():
+            node.bias = 0.0
+        organism.network = neat.nn.FeedForwardNetwork.create(
+            organism.genome, organism.config
+        )
+        organism._compiled_network = None
+        food = Food(280, 200)
+        start_x = organism.position[0]
+        for _ in range(25):
+            organism.take_action([food], [], [], [])
+        self.assertLess(abs(organism.position[0] - start_x), 2)
 
     def test_update_increments_steps_once(self):
         # Counters should increment only in update (not also in take_action).

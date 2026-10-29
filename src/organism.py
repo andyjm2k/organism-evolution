@@ -178,33 +178,21 @@ class Organism:
             network_output = compiled.activate(inputs)
         else:
             network_output = self.network.activate(inputs)
-        # Network outputs modulate exploration. Pursuit of food and mates is
-        # innate, because a random tanh heading cannot point at a sensed target.
-        angle_signal = network_output[0] + random.uniform(-0.01, 0.01)
-        speed_signal = network_output[1] + random.uniform(-0.01, 0.01)
+        # Outputs are the only motor commands. Founding genomes share a
+        # wiring that maps sensed direction onto these axes; later genomes
+        # do whatever their weights say.
+        vx = network_output[0]
+        vy = network_output[1]
+        breeding_desire = network_output[2]
         rest_desire = network_output[3] if len(network_output) > 3 else -1.0
         width = self.environment_config.get("width", 800)
         height = self.environment_config.get("height", 600)
-        pursuit = self._pursuit_heading(
-            nearby_food, nearby_organisms, nearby_breeding_partners
-        )
         move_x = move_y = 0.0
-        # A sensed meal or mate is worth walking toward. Rest only applies
-        # when nothing useful is in range.
-        if pursuit is not None or rest_desire <= 0.5:
-            if pursuit is not None:
-                angle_rad = pursuit
-                speed_fraction = max(
-                    0.7, max(0.0, min(1.0, (speed_signal + 1.0) / 2.0))
-                )
-            else:
-                angle_rad = ((angle_signal + 1.0) / 2.0) * (2.0 * math.pi)
-                speed_fraction = max(0.0, min(1.0, (speed_signal + 1.0) / 2.0))
-            step_speed = self.speed * speed_fraction
-            move_x = step_speed * math.cos(angle_rad)
-            move_y = step_speed * math.sin(angle_rad)
-            move_x += random.uniform(-0.02, 0.02) * self.speed
-            move_y += random.uniform(-0.02, 0.02) * self.speed
+        if rest_desire <= 0.5:
+            move_x = self.speed * vx
+            move_y = self.speed * vy
+            move_x += random.uniform(-0.01, 0.01) * self.speed
+            move_y += random.uniform(-0.01, 0.01) * self.speed
         new_x = max(0, min(self.position[0] + move_x, width))
         new_y = max(0, min(self.position[1] + move_y, height))
         if abs(move_x) > 0 or abs(move_y) > 0:
@@ -214,9 +202,7 @@ class Organism:
             self.energy = max(0, self.energy - self.movement_energy_cost)
         else:
             self.was_moving = False
-        # Ready organisms breed with a mate they have already closed with.
-        # The shared bias prior cannot separately enable courtship and rest.
-        if self.can_breed():
+        if breeding_desire > 0.5 and self.can_breed():
             self._try_breed(nearby_breeding_partners or nearby_organisms)
 
     def update(self, food_items, organisms):
@@ -341,66 +327,6 @@ class Organism:
                     f"Carnivore ate prey; energy={self.energy:.1f}",
                 )
                 break
-
-    def _nearest_entity(self, entities):
-        """Return the closest entity that has a position."""
-        best = None
-        best_dist = float("inf")
-        for entity in entities:
-            pos = getattr(entity, "position", None)
-            if pos is None or self.position is None:
-                continue
-            dist = distance(self.position, pos)
-            if dist < best_dist:
-                best = entity
-                best_dist = dist
-        return best
-
-    def _pursuit_heading(self, nearby_food, nearby_organisms, nearby_partners):
-        """
-        Return a heading toward a mate or a meal, or None to explore.
-
-        Hungry organisms feed first. Well-fed ones close with a mate so
-        breeding can replace the steady-state cull.
-        """
-        if self.position is None:
-            return None
-        partners = [
-            org
-            for org in (nearby_partners or [])
-            if org is not self and getattr(org, "position", None) is not None
-        ]
-        if self.is_carnivore:
-            meal_candidates = [
-                org
-                for org in nearby_organisms
-                if org is not self
-                and not org.is_carnivore
-                and org.energy > 0
-                and org.position is not None
-            ]
-        else:
-            meal_candidates = [
-                food for food in nearby_food if getattr(food, "position", None)
-            ]
-        meal = self._nearest_entity(meal_candidates)
-        meal_dist = (
-            distance(self.position, meal.position) if meal is not None else float("inf")
-        )
-        # Court only on a feeding ground. Chasing a mate into empty space
-        # is how a birth wave starved itself out.
-        fed = self.energy >= max(140.0, 0.6 * self.max_energy) and meal_dist <= 80
-        if fed and partners:
-            target = self._nearest_entity(partners)
-        else:
-            target = meal
-        if target is None:
-            return None
-        dx = target.position[0] - self.position[0]
-        dy = target.position[1] - self.position[1]
-        if dx == 0 and dy == 0:
-            return None
-        return math.atan2(dy, dx)
 
     def can_breed(self):
         """Return True when energy, cooldown, and boundary rules allow breeding."""
