@@ -2,7 +2,7 @@
 
 The **living world** is a continuous-evolution simulation mode. Unlike the default episodic NEAT harness, it never resets the arena between trials or generations. Organisms live until they starve or are hunted, food depletes and regrows from **nutrient clouds**, and in-world breeding adds offspring directly to the live population.
 
-Steady-state NEAT (**Approach B**) periodically culls low-fitness organisms and injects crossover offspring from top performers.
+Steady-state NEAT (**Approach B**) culls low-fitness organisms only when the population is at `max_population`, then may inject crossover offspring from top performers into free slots.
 
 ## Quick start
 
@@ -24,7 +24,7 @@ Configuration defaults live in `config/living-world-config.json`.
 | `src/food_ecology.py` | Nutrient clouds + food regrowth under scarcity |
 | `src/population_registry.py` | Live organism/genome registry with carrying capacity |
 | `src/rolling_fitness.py` | Lifetime selection fitness (survival, role, offspring) |
-| `src/selection_scheduler.py` | Periodic cull + immigration (steady-state NEAT) |
+| `src/selection_scheduler.py` | Capacity cull + immigration (steady-state NEAT) |
 | `src/world_clock.py` | Monotonic step counter and epoch grouping |
 | `src/camera.py` | Viewport pan and world/screen coordinate transforms |
 | `src/living_world_renderer.py` | Large-world pygame UI (minimap, tracking, genome panel) |
@@ -38,7 +38,7 @@ Configuration defaults live in `config/living-world-config.json`.
 | Food | Full respawn each trial | Nutrient clouds regrow pellets |
 | Organisms | Reset each trial; recreated each generation | Persist until death |
 | Breeding offspring | Episode-local only | Join live population |
-| Selection | NEAT generational reproduction | Steady-state cull + immigration |
+| Selection | NEAT generational reproduction | Capacity cull + immigration |
 | Default world | 1000×1000 | 4000×4000 |
 | Default viewport | Full window | 900×900 draggable region |
 
@@ -58,8 +58,10 @@ Key config keys:
 Every `selection_interval_steps`:
 
 1. Rolling fitness is synced to NEAT genomes
-2. Bottom `cull_fraction` of living organisms are removed
+2. If at `max_population`, the bottom `cull_fraction` of living organisms are removed
 3. If below `max_population`, immigrants may spawn (crossover of top performers, or fresh random genomes)
+
+Under the cap, natural deaths and births control headcount — selection never force-culls a below-capacity population. In-world births that would exceed the cap still displace the lowest-fitness organism so the limit is hard.
 
 When the population goes extinct, the scheduler automatically reseeds immigrants.
 
@@ -94,7 +96,7 @@ See `config/living-world-config.json` for defaults. Important keys:
 | `viewport_width/height` | 900 | Visible window region |
 | `max_population` | 120 | Carrying capacity |
 | `selection_interval_steps` | 4000 | Steady-state selection cadence |
-| `cull_fraction` | 0.1 | Fraction culled each selection tick |
+| `cull_fraction` | 0.1 | Fraction culled on selection ticks that hit `max_population` |
 | `immigration_rate` | 0.03 | Probability of injecting immigrants when under cap |
 | `max_world_steps` | `null` | Optional stop condition (`null` = run until quit) |
 | `minimap_size` | 160 | Minimap pixel width/height |
