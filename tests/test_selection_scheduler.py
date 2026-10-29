@@ -55,7 +55,7 @@ class TestSelectionScheduler(unittest.TestCase):
         self.assertTrue(self.scheduler.should_run(100))
         self.assertFalse(self.scheduler.should_run(50))
 
-    def test_run_culls_when_population_alive(self):
+    def test_run_does_not_cull_when_under_max_population(self):
         neat_config = _neat_config()
         population = neat.Population(neat_config)
         registry = PopulationRegistry(10, _env_config(), neat_config, "normal")
@@ -65,7 +65,24 @@ class TestSelectionScheduler(unittest.TestCase):
         for gid, _ in genomes:
             tracker.init_genome(gid)
             tracker._scores[gid] = gid
+        # Immigration off so under-cap selection cannot change headcount.
         scheduler = SelectionScheduler(100, 10, 0.2, immigration_rate=0.0)
+        scheduler.run(population, registry, tracker, None, neat_config)
+        self.assertEqual(registry.count(), 4)
+
+    def test_run_culls_only_when_at_max_population(self):
+        neat_config = _neat_config()
+        population = neat.Population(neat_config)
+        # Cap equals the seeded headcount so selection is at capacity.
+        registry = PopulationRegistry(4, _env_config(), neat_config, "normal")
+        genomes = list(population.population.items())[:4]
+        registry.seed_from_genomes(genomes, population)
+        tracker = RollingFitnessTracker({})
+        for gid, _ in genomes:
+            tracker.init_genome(gid)
+            tracker._scores[gid] = gid
+        # Immigration off so only culling can reduce the living count.
+        scheduler = SelectionScheduler(100, 4, 0.25, immigration_rate=0.0)
         scheduler.run(population, registry, tracker, None, neat_config)
         self.assertLess(registry.count(), 4)
 

@@ -7,14 +7,14 @@ from logging_util import log_always
 
 
 class SelectionScheduler:
-    """Periodic culling and immigration using steady-state NEAT (Approach B)."""
+    """Periodic capacity culling and immigration using steady-state NEAT."""
 
     def __init__(self, interval_steps, max_population, cull_fraction, immigration_rate):
         # Steps between selection events.
         self.interval_steps = max(1, int(interval_steps))
         # Population cap shared with the registry.
         self.max_population = max_population
-        # Fraction of living organisms to cull each selection tick.
+        # Fraction of living organisms to cull when at max population.
         self.cull_fraction = float(cull_fraction)
         # Probability of injecting fresh genomes when under cap.
         self.immigration_rate = float(immigration_rate)
@@ -26,7 +26,7 @@ class SelectionScheduler:
     def run(
         self, population, registry, fitness_tracker, batch_engine, neat_config, sim_config=None
     ):
-        """Cull weak organisms and inject offspring of top performers."""
+        """Cull only at capacity, then inject offspring of top performers."""
         alive = registry.alive_organisms()
         if not alive:
             log_always("Selection: population extinct — reseeding immigrants")
@@ -40,13 +40,17 @@ class SelectionScheduler:
                 5,
             )
             return
+        # Sync rolling fitness onto NEAT genomes before any selection work.
         fitness_tracker.apply_to_genomes(population.population)
-        cull_count = max(1, int(len(alive) * self.cull_fraction))
-        culled = registry.cull_worst(fitness_tracker, cull_count)
-        log_always(
-            f"Selection: culled {len(culled)} organisms "
-            f"({registry.count()} remain)"
-        )
+        # Forced culling is capacity pressure only — never shrink a living
+        # population that is still under the max population limit.
+        if registry.count() >= self.max_population:
+            cull_count = max(1, int(len(alive) * self.cull_fraction))
+            culled = registry.cull_worst(fitness_tracker, cull_count)
+            log_always(
+                f"Selection: culled {len(culled)} organisms at capacity "
+                f"({registry.count()} remain)"
+            )
         deficit = self.max_population - registry.count()
         if deficit > 0 and random.random() < self.immigration_rate:
             inject = min(deficit, max(1, int(deficit * 0.3)))

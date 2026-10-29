@@ -130,7 +130,7 @@ Living-world modules have focused test files:
 |-----------|--------|
 | `test_living_world.py` | Food ecology, rolling fitness, harness integration |
 | `test_population_registry.py` | Seeding, births, culling, capacity |
-| `test_selection_scheduler.py` | Steady-state cull and immigration |
+| `test_selection_scheduler.py` | Capacity cull and immigration |
 | `test_camera.py` | Viewport pan, drag, coordinate transforms |
 | `test_world_clock.py` | Step/epoch counting |
 | `test_genome_viz.py` | Genome graph rendering |
