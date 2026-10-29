@@ -93,6 +93,7 @@ def _create_archetypes(genome_type, config, archetype_count, extra_hidden, extra
         _enhance_archetype(genome, config, extra_hidden, extra_connections)
         _bias_foraging_weights(genome, config, foraging_bias)
         genome.fitness = 0.0
+        genome.diet_key = 1
         archetypes.append(genome)
     return archetypes
 
@@ -135,6 +136,9 @@ def bootstrap_population(population, neat_config, sim_config=None):
         genome = _clone_genome(genome_type, genome_id, template, genome_config)
         _jitter_weights(genome, weight_jitter)
         _ensure_connections_enabled(genome)
+        # Founders eat the plant food that actually exists. Species ids are an
+        # accident of speciation and must not turn the whole cohort into hunters.
+        genome.diet_key = getattr(template, "diet_key", 1)
         bootstrapped[genome_id] = genome
 
     population.population = bootstrapped
@@ -167,4 +171,5 @@ def bootstrap_immigrant_genome(neat_config, sim_config=None):
     _bias_foraging_weights(genome, genome_config, foraging_bias)
     _ensure_connections_enabled(genome)
     genome.fitness = 0.0
+    genome.diet_key = 1
     return genome

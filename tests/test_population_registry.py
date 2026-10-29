@@ -9,6 +9,7 @@ import neat
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from organism import Organism
 from population_registry import PopulationRegistry
 
 
@@ -84,6 +85,24 @@ class TestPopulationRegistry(unittest.TestCase):
         new_id = self.registry.add_birth(child_genome, child)
         self.assertNotEqual(new_id, genomes[0][0])
         self.assertIs(self.registry.get(new_id), child)
+
+    def test_add_birth_keeps_species_diet(self):
+        """Offspring keep the parent species role instead of the new genome id."""
+        genomes = list(self.population.population.items())[:1]
+        self.registry.seed_from_genomes(genomes, self.population)
+        parent = self.registry.get(genomes[0][0])
+        child_genome = self.neat_config.genome_type(999)
+        child_genome.configure_new(self.neat_config.genome_config)
+        child = self.registry._make_organism(
+            child_genome, (50, 50), parent.species_id, 999
+        )
+        # Genome id 2 would be a carnivore under the id rule; species 1 is not.
+        child.species_id = 1
+        self.registry._next_genome_id = 2
+        new_id = self.registry.add_birth(child_genome, child)
+        self.assertEqual(new_id, 2)
+        self.assertFalse(child.is_carnivore)
+        self.assertTrue(Organism._diet_from_species(2))
 
     def test_remove_dead_clears_zero_energy_organisms(self):
         genomes = list(self.population.population.items())[:2]

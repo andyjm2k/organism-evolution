@@ -100,6 +100,10 @@ See `config/living-world-config.json` for defaults. Important keys:
 | `minimap_size` | 160 | Minimap pixel width/height |
 | `camera_track_smoothing` | 0.15 | Smooth follow factor for tracked organisms |
 
+### Feeding and breeding
+
+Organisms walk toward sensed food, and toward a mate only when they are already fed and close to a meal. Ready mates within `breeding_detection_radius` can breed, and offspring keep the parent's diet so a herbivore lineage keeps eating plants. Connection count still sets body size, so founders start unconnected and gain structure when they reproduce.
+
 ### Genesis bootstrap
 
 At startup the living world clones a few archetypes from the NEAT config so species groups share a topology. Extra nodes and links are optional; the defaults leave the `.ini` genome alone, because added connections increase body size and metabolism.

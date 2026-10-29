@@ -29,8 +29,11 @@ class PopulationRegistry:
             x = random.randint(10, max(11, width - 10))
             y = random.randint(10, max(11, height - 10))
             species_id = population.species.get_species_id(genome_id)
+            # Prefer an explicit role. NEAT species ids are arbitrary, and the
+            # id modulo made an entire founding species carnivores with nothing to hunt.
+            diet_key = getattr(genome, "diet_key", species_id)
             organism = self._make_organism(
-                genome, (x, y), species_id, genome_id, diet_key=species_id
+                genome, (x, y), species_id, genome_id, diet_key=diet_key
             )
             if batch_engine is not None:
                 batch_engine.register_genome(genome_id, genome, self.neat_config)
@@ -81,10 +84,13 @@ class PopulationRegistry:
         self._next_genome_id += 1
         child_genome.key = genome_id
         child_organism.genome_id = genome_id
-        child_organism._diet_key = genome_id
+        # Keep the diet the child was born with. Species ids and fresh genome
+        # ids do not encode herbivore vs carnivore reliably.
+        diet_key = getattr(child_organism, "_diet_key", child_organism.species_id)
+        child_organism._diet_key = diet_key
         child_organism._inference_genome_id = genome_id
         preserved_energy = child_organism.energy
-        child_organism.is_carnivore = Organism._diet_from_species(genome_id)
+        child_organism.is_carnivore = Organism._diet_from_species(diet_key)
         child_organism._calculate_attributes()
         child_organism.energy = min(preserved_energy, child_organism.max_energy)
         if batch_engine is not None:
@@ -136,7 +142,10 @@ class PopulationRegistry:
                 self.neat_config, population.population, population.generation
             )
         species_id = population.species.get_species_id(genome_id)
-        organism = self._make_organism(genome, (x, y), species_id, genome_id)
+        diet_key = getattr(genome, "diet_key", species_id)
+        organism = self._make_organism(
+            genome, (x, y), species_id, genome_id, diet_key=diet_key
+        )
         if batch_engine is not None:
             batch_engine.register_genome(genome_id, genome, self.neat_config)
             organism._compiled_network = batch_engine._networks[genome_id]

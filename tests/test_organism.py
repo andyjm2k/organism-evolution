@@ -110,6 +110,15 @@ class TestOrganism(unittest.TestCase):
         organism.steps_since_breeding = 200
         self.assertTrue(organism.can_breed())
 
+    def test_herbivore_walks_toward_sensed_food(self):
+        """A sensed pellet pulls the organism toward it without a trained net."""
+        organism = _make_organism(is_carnivore=False, position=(200, 200))
+        food = Food(280, 200)
+        start_x = organism.position[0]
+        for _ in range(25):
+            organism.take_action([food], [], [], [])
+        self.assertGreater(organism.position[0], start_x + 4)
+
     def test_update_increments_steps_once(self):
         # Counters should increment only in update (not also in take_action).
         organism = _make_organism(is_carnivore=False)

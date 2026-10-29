@@ -169,6 +169,41 @@ class TestEpisodeBreeding(unittest.TestCase):
         # unless a structural mutation adds a link.
         self.assertGreater(len(child.genome.nodes), 0)
 
+    def test_partners_breed_inside_sensor_range(self):
+        """Mates within the breeding sensor can reproduce without body overlap."""
+        config = _load_neat_config()
+        env = _env_config()
+        parent_a = Organism(
+            _fresh_genome(config),
+            config,
+            (400, 300),
+            env,
+            species_id=1,
+            logging_level="normal",
+        )
+        parent_b = Organism(
+            _fresh_genome(config),
+            config,
+            (460, 300),
+            env,
+            species_id=1,
+            logging_level="normal",
+        )
+        parent_a.energy = 200
+        parent_b.energy = 200
+        parent_a.steps_since_breeding = 1000
+        parent_b.steps_since_breeding = 1000
+        queued = []
+
+        class StubSimulation:
+            def register_birth(self, child, genome, parent_a, parent_b):
+                queued.append(child)
+
+        parent_a.simulation = StubSimulation()
+        parent_a._try_breed([parent_b])
+        self.assertEqual(len(queued), 1)
+        self.assertEqual(queued[0].species_id, 1)
+
     def test_offspring_starts_with_reduced_energy(self):
         """Born organisms use offspring_starting_energy, not full spawn energy."""
         config = _load_neat_config()

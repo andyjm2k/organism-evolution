@@ -169,9 +169,8 @@ class TestSimulation(unittest.TestCase):
         )
         # min_species_size should be 1 to allow small species.
         self.assertEqual(neat_config.reproduction_config.min_species_size, 1)
-        # Founding population is sized so living-world culling cannot
-        # extinguish it inside a five-minute run.
-        self.assertEqual(neat_config.pop_size, 400)
+        # Founders start below carrying capacity so breeding can grow the world.
+        self.assertEqual(neat_config.pop_size, 60)
         # Create a simulation and verify evaluation works without RuntimeError.
         sim_config = {
             "environment_width": 200,

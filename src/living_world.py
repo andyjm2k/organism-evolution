@@ -103,6 +103,7 @@ class LivingWorldSimulation:
             self.renderer = LivingWorldRenderer(self.sim_config, self.logging_level)
             self.renderer.set_environment_config(self.environment_config)
         self._pending_births = []
+        self._birth_count = 0
 
     def register_birth(self, child, child_genome, parent_a, parent_b):
         """Admit an in-world birth into the live population."""
@@ -117,6 +118,7 @@ class LivingWorldSimulation:
             [getattr(parent_a, "genome_id", None), getattr(parent_b, "genome_id", None)]
         )
         self._pending_births.append(child)
+        self._birth_count += 1
         parent_a.fitness_bonus += 100
         parent_b.fitness_bonus += 100
         log_detailed(
@@ -272,7 +274,8 @@ class LivingWorldSimulation:
                 log_always(
                     f"Epoch {self.clock.epoch} step {self.clock.step}: "
                     f"{self.registry.count()} alive, "
-                    f"food {self.food_ecology.active_food_count()}"
+                    f"food {self.food_ecology.active_food_count()}, "
+                    f"births {self._birth_count}"
                 )
             if self.renderer and self.clock.step % self.render_stride == 0:
                 self.renderer.set_world_step(self.clock.step)
