@@ -178,23 +178,21 @@ class Organism:
             network_output = compiled.activate(inputs)
         else:
             network_output = self.network.activate(inputs)
-        # Continuous control: angle, speed fraction, breed desire, rest gate.
-        angle_signal = network_output[0] + random.uniform(-0.01, 0.01)
-        speed_signal = network_output[1] + random.uniform(-0.01, 0.01)
+        # Outputs are the only motor commands. Founding genomes share a
+        # wiring that maps sensed direction onto these axes; later genomes
+        # do whatever their weights say.
+        vx = network_output[0]
+        vy = network_output[1]
         breeding_desire = network_output[2]
         rest_desire = network_output[3] if len(network_output) > 3 else -1.0
         width = self.environment_config.get("width", 800)
         height = self.environment_config.get("height", 600)
         move_x = move_y = 0.0
         if rest_desire <= 0.5:
-            # Map tanh outputs into heading [0, 2pi) and speed [0, max speed].
-            angle_rad = ((angle_signal + 1.0) / 2.0) * (2.0 * math.pi)
-            speed_fraction = max(0.0, min(1.0, (speed_signal + 1.0) / 2.0))
-            step_speed = self.speed * speed_fraction
-            move_x = step_speed * math.cos(angle_rad)
-            move_y = step_speed * math.sin(angle_rad)
-            move_x += random.uniform(-0.05, 0.05) * self.speed
-            move_y += random.uniform(-0.05, 0.05) * self.speed
+            move_x = self.speed * vx
+            move_y = self.speed * vy
+            move_x += random.uniform(-0.01, 0.01) * self.speed
+            move_y += random.uniform(-0.01, 0.01) * self.speed
         new_x = max(0, min(self.position[0] + move_x, width))
         new_y = max(0, min(self.position[1] + move_y, height))
         if abs(move_x) > 0 or abs(move_y) > 0:
@@ -341,7 +339,9 @@ class Organism:
             return False
         width = self.environment_config.get("width", 800)
         height = self.environment_config.get("height", 600)
-        min_distance = min(width, height) * 0.1
+        # A thin edge margin. The old 10% inset blocked breeding anywhere
+        # near the nutrient clouds, which sit close to that line.
+        min_distance = min(width, height) * 0.02
         dist_edge = min(
             self.position[0],
             self.position[1],
@@ -361,11 +361,12 @@ class Organism:
                 continue
             if not org.can_breed():
                 continue
-            if not within_radius(
-                self.position,
-                org.position,
-                (self.get_radius() + org.get_radius()) * 1.5,
-            ):
+            # Sensor range is the meeting distance. Body-radius overlap on a
+            # multi-thousand-unit world almost never happens, so lineages die out.
+            meet_range = float(
+                self.environment_config.get("breeding_detection_radius", 80)
+            )
+            if not within_radius(self.position, org.position, meet_range):
                 continue
             partners.append(org)
         if not partners:
@@ -400,6 +401,7 @@ class Organism:
             (spawn_x, spawn_y),
             self.environment_config,
             species_id=self.species_id,
+            diet_key=getattr(self, "_diet_key", self.species_id),
             logging_level=self.logging_level,
         )
         offspring_energy = float(

@@ -106,9 +106,24 @@ class TestCreateImmigrantGenome(unittest.TestCase):
         neat_config = _neat_config()
         population = neat.Population(neat_config)
         ids = list(population.population.keys())[:2]
-        genome = _create_immigrant_genome(population, neat_config, ids)
+        # Founders are unconnected, so give the fitter parent one link and
+        # skip mutation. Crossover must copy that disjoint gene.
+        fitter = population.population[ids[0]]
+        other = population.population[ids[1]]
+        fitter.fitness = 10.0
+        other.fitness = 1.0
+        genome_config = neat_config.genome_config
+        innovation = genome_config.innovation_tracker.get_innovation_number(
+            -1, 0, "test"
+        )
+        connection = neat.DefaultGenome.create_connection(
+            genome_config, -1, 0, innovation
+        )
+        fitter.connections[connection.key] = connection
+        with patch.object(neat.DefaultGenome, "mutate", lambda self, config: None):
+            genome = _create_immigrant_genome(population, neat_config, ids)
         self.assertIsNotNone(genome)
-        self.assertGreater(len(genome.connections), 0)
+        self.assertIn((-1, 0), genome.connections)
 
 
 if __name__ == "__main__":

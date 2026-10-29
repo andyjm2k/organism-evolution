@@ -24,7 +24,7 @@
     "nutrient_cloud_spawn_rate": 0.04,
 
     "detection_radius": 200,
-    "food_detection_radius": 300,
+    "food_detection_radius": 1400,
     "threat_detection_radius": 100,
     "breeding_detection_radius": 150,
     "starting_energy": 350,
@@ -32,13 +32,13 @@
     "movement_cost": 0.01,
     "boundary_penalty": 0.5,
     "breeding_cooldown": 200,
-    "offspring_starting_energy": 50,
+    "offspring_starting_energy": 150,
 
     "genesis_archetype_count": 8,
-    "genesis_extra_hidden_nodes": 6,
-    "genesis_extra_connections": 20,
+    "genesis_extra_hidden_nodes": 0,
+    "genesis_extra_connections": 0,
     "genesis_weight_jitter": 0.05,
-    "genesis_foraging_bias": 0.35,
+    "genesis_foraging_bias": 0.0,
 
     "fitness_offspring_weight": 500,
     "fitness_survival_weight": 0.5,

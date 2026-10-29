@@ -4,17 +4,38 @@ import random
 
 from logging_util import log_always
 
-# Network input indices (see network_inputs.py) mapped to NEAT negative node keys.
+# Sensor channels (network_inputs.py) as NEAT keys: key = -(index) - 1.
+# Food dx/dy are channels 11 and 12. Prey dx/dy are 18 and 19.
+# Partner dx/dy are channels 25 and 26.
 _FOOD_DX_INPUT = -12
 _FOOD_DY_INPUT = -13
-_PREY_DX_INPUT = -18
-_PREY_DY_INPUT = -19
-_ENERGY_INPUT = -1
+_PREY_DX_INPUT = -19
+_PREY_DY_INPUT = -20
+_PARTNER_DX_INPUT = -26
+_PARTNER_DY_INPUT = -27
 
-# Primary motor outputs: heading angle and speed fraction.
-_ANGLE_OUTPUT = 0
-_SPEED_OUTPUT = 1
+# Motor outputs. 0 and 1 are signed velocity, not a heading angle.
+_VX_OUTPUT = 0
+_VY_OUTPUT = 1
+_BREED_OUTPUT = 2
 _REST_OUTPUT = 3
+
+# Shared day-0 genome. Every founder starts here; births inherit and mutate it.
+# Food and prey outweigh a mate, so a visible meal pulls harder than courtship.
+_FOUNDING_WIRES = (
+    (_FOOD_DX_INPUT, _VX_OUTPUT, 1.8),
+    (_FOOD_DY_INPUT, _VY_OUTPUT, 1.8),
+    (_PREY_DX_INPUT, _VX_OUTPUT, 1.8),
+    (_PREY_DY_INPUT, _VY_OUTPUT, 1.8),
+    (_PARTNER_DX_INPUT, _VX_OUTPUT, 0.65),
+    (_PARTNER_DY_INPUT, _VY_OUTPUT, 0.65),
+)
+_FOUNDING_BIASES = {
+    _VX_OUTPUT: 0.2,
+    _VY_OUTPUT: 0.05,
+    _BREED_OUTPUT: 1.0,
+    _REST_OUTPUT: -1.0,
+}
 
 
 def _clone_genome(genome_type, genome_id, template, config):
@@ -50,37 +71,42 @@ def _jitter_weights(genome, stdev):
             connection.weight += random.gauss(0.0, stdev)
 
 
+def install_founding_motif(genome, config):
+    """Write the shared starting wiring onto one genome.
+
+    This is initial genome content, not a runtime reflex. After this, movement
+    and breeding desire are whatever the network outputs.
+    """
+    for node_id, bias in _FOUNDING_BIASES.items():
+        node = genome.nodes.get(node_id)
+        if node is not None:
+            node.bias = bias
+    if config.innovation_tracker is None:
+        return
+    for src, dst, weight in _FOUNDING_WIRES:
+        key = (src, dst)
+        existing = genome.connections.get(key)
+        if existing is None:
+            innovation = config.innovation_tracker.get_innovation_number(
+                src, dst, "founding_motif"
+            )
+            existing = genome.create_connection(config, src, dst, innovation)
+            genome.connections[key] = existing
+        existing.weight = weight
+        existing.enabled = True
+
+
 def _bias_foraging_weights(genome, config, strength):
-    """Nudge sensory→motor weights so naive networks can seek resources."""
+    """Add an optional extra nudge on the founding sensory→velocity wires."""
     if strength <= 0:
         return
-    pairs = [
-        (_FOOD_DX_INPUT, _ANGLE_OUTPUT),
-        (_FOOD_DY_INPUT, _ANGLE_OUTPUT),
-        (_FOOD_DX_INPUT, _SPEED_OUTPUT),
-        (_FOOD_DY_INPUT, _SPEED_OUTPUT),
-        (_PREY_DX_INPUT, _ANGLE_OUTPUT),
-        (_PREY_DY_INPUT, _ANGLE_OUTPUT),
-        (_PREY_DX_INPUT, _SPEED_OUTPUT),
-        (_PREY_DY_INPUT, _SPEED_OUTPUT),
-    ]
-    for in_node, out_node in pairs:
-        key = (in_node, out_node)
-        if key in genome.connections:
-            genome.connections[key].weight += random.uniform(
-                strength * 0.5, strength * 1.5
-            )
-        elif config.innovation_tracker is not None:
-            innovation = config.innovation_tracker.get_innovation_number(
-                in_node, out_node, "bootstrap_bias"
-            )
-            connection = genome.create_connection(config, in_node, out_node, innovation)
-            connection.weight = random.uniform(strength * 0.5, strength * 1.5)
-            connection.enabled = True
-            genome.connections[key] = connection
-    energy_key = (_ENERGY_INPUT, _REST_OUTPUT)
-    if energy_key in genome.connections:
-        genome.connections[energy_key].weight -= strength * 0.5
+    for src, dst, _base in _FOUNDING_WIRES:
+        key = (src, dst)
+        connection = genome.connections.get(key)
+        if connection is None or config.innovation_tracker is None:
+            continue
+        connection.weight += random.uniform(strength * 0.5, strength * 1.5)
+        connection.enabled = True
 
 
 def _create_archetypes(genome_type, config, archetype_count, extra_hidden, extra_connections, foraging_bias):
@@ -91,8 +117,10 @@ def _create_archetypes(genome_type, config, archetype_count, extra_hidden, extra
         genome = genome_type(archetype_id)
         genome.configure_new(config)
         _enhance_archetype(genome, config, extra_hidden, extra_connections)
-        _bias_foraging_weights(genome, config, foraging_bias)
         genome.fitness = 0.0
+        genome.diet_key = 1
+        install_founding_motif(genome, config)
+        _bias_foraging_weights(genome, config, foraging_bias)
         archetypes.append(genome)
     return archetypes
 
@@ -113,10 +141,10 @@ def bootstrap_population(population, neat_config, sim_config=None):
     """
     sim_config = sim_config or {}
     archetype_count = int(sim_config.get("genesis_archetype_count", 8))
-    extra_hidden = int(sim_config.get("genesis_extra_hidden_nodes", 6))
-    extra_connections = int(sim_config.get("genesis_extra_connections", 20))
+    extra_hidden = int(sim_config.get("genesis_extra_hidden_nodes", 0))
+    extra_connections = int(sim_config.get("genesis_extra_connections", 0))
     weight_jitter = float(sim_config.get("genesis_weight_jitter", 0.05))
-    foraging_bias = float(sim_config.get("genesis_foraging_bias", 0.35))
+    foraging_bias = float(sim_config.get("genesis_foraging_bias", 0.0))
 
     genome_config = neat_config.genome_config
     genome_type = neat_config.genome_type
@@ -135,6 +163,9 @@ def bootstrap_population(population, neat_config, sim_config=None):
         genome = _clone_genome(genome_type, genome_id, template, genome_config)
         _jitter_weights(genome, weight_jitter)
         _ensure_connections_enabled(genome)
+        # Founders eat the plant food that actually exists. Species ids are an
+        # accident of speciation and must not turn the whole cohort into hunters.
+        genome.diet_key = getattr(template, "diet_key", 1)
         bootstrapped[genome_id] = genome
 
     population.population = bootstrapped
@@ -157,14 +188,16 @@ def bootstrap_population(population, neat_config, sim_config=None):
 def bootstrap_immigrant_genome(neat_config, sim_config=None):
     """Create one enhanced random genome for immigration or extinction reseeding."""
     sim_config = sim_config or {}
-    extra_hidden = int(sim_config.get("genesis_extra_hidden_nodes", 6))
-    extra_connections = int(sim_config.get("genesis_extra_connections", 20))
-    foraging_bias = float(sim_config.get("genesis_foraging_bias", 0.35))
+    extra_hidden = int(sim_config.get("genesis_extra_hidden_nodes", 0))
+    extra_connections = int(sim_config.get("genesis_extra_connections", 0))
+    foraging_bias = float(sim_config.get("genesis_foraging_bias", 0.0))
     genome_config = neat_config.genome_config
     genome = neat_config.genome_type(0)
     genome.configure_new(genome_config)
     _enhance_archetype(genome, genome_config, extra_hidden, extra_connections)
+    genome.fitness = 0.0
+    genome.diet_key = 1
+    install_founding_motif(genome, genome_config)
     _bias_foraging_weights(genome, genome_config, foraging_bias)
     _ensure_connections_enabled(genome)
-    genome.fitness = 0.0
     return genome

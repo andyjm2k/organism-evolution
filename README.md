@@ -14,7 +14,7 @@ Two simulation harnesses are available:
 - Genetic evolution using NEAT
 - Terminal dashboard for headless mode
 - 31-channel neural network inputs (food, prey/threat, breeding — nearest + second-nearest)
-- Continuous steering control (angle + speed) with movement trails and click-to-inspect overlays
+- Neural velocity control (vx, vy, breed, rest) with movement trails and click-to-inspect overlays
 - **Living world mode**: 4000×4000 persistent arena, draggable camera, minimap, nutrient clouds, organism genome panel
 
 ## Setup
@@ -111,9 +111,9 @@ Legacy JSON keys are still supported:
 
 | Output | Role |
 |--------|------|
-| 0 | Steering angle (tanh → full circle) |
-| 1 | Speed fraction (tanh → 0..max speed) |
-| 2 | Breeding desire (>0.5 triggers attempt) |
+| 0 | Velocity x (tanh, scaled by body speed) |
+| 1 | Velocity y (tanh, scaled by body speed) |
+| 2 | Breeding desire (>0.5 triggers an attempt) |
 | 3 | Rest gate (>0.5 skips movement) |
 
 ## Testing
