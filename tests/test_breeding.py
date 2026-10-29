@@ -165,8 +165,9 @@ class TestEpisodeBreeding(unittest.TestCase):
         # Child must not be the same object as either parent genome.
         self.assertIsNot(child.genome, parent_a.genome)
         self.assertIsNot(child.genome, parent_b.genome)
-        # Crossover typically yields a non-empty connection set.
-        self.assertGreater(len(child.genome.connections), 0)
+        # Founders start unconnected, so the child inherits that topology
+        # unless a structural mutation adds a link.
+        self.assertGreater(len(child.genome.nodes), 0)
 
     def test_offspring_starts_with_reduced_energy(self):
         """Born organisms use offspring_starting_energy, not full spawn energy."""
