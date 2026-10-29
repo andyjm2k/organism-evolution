@@ -102,15 +102,15 @@ See `config/living-world-config.json` for defaults. Important keys:
 
 ### Genesis bootstrap
 
-At startup the living world replaces vanilla NEAT genomes with **enhanced archetypes** so early organisms survive long enough to forage and breed:
+At startup the living world clones a few archetypes from the NEAT config so species groups share a topology. Extra nodes and links are optional; the defaults leave the `.ini` genome alone, because added connections increase body size and metabolism.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `genesis_archetype_count` | 8 | Number of seed archetypes (forms distinct species clusters) |
-| `genesis_extra_hidden_nodes` | 6 | Hidden nodes added to each archetype beyond `num_hidden` |
-| `genesis_extra_connections` | 20 | Additional feed-forward connections per archetype |
+| `genesis_archetype_count` | 8 | Number of seed archetypes |
+| `genesis_extra_hidden_nodes` | 0 | Hidden nodes added to each archetype beyond `num_hidden` |
+| `genesis_extra_connections` | 0 | Additional feed-forward connections per archetype |
 | `genesis_weight_jitter` | 0.05 | Gaussian noise on cloned weights for within-species diversity |
-| `genesis_foraging_bias` | 0.35 | Strength of food/prey→movement weight nudging |
+| `genesis_foraging_bias` | 0 | Strength of food/prey→movement weight nudging |
 
 CLI overrides use the same `key=value` syntax as the episodic harness, e.g. `render=false`, `max_world_steps=5000`.
 

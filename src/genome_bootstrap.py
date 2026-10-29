@@ -113,10 +113,10 @@ def bootstrap_population(population, neat_config, sim_config=None):
     """
     sim_config = sim_config or {}
     archetype_count = int(sim_config.get("genesis_archetype_count", 8))
-    extra_hidden = int(sim_config.get("genesis_extra_hidden_nodes", 6))
-    extra_connections = int(sim_config.get("genesis_extra_connections", 20))
+    extra_hidden = int(sim_config.get("genesis_extra_hidden_nodes", 0))
+    extra_connections = int(sim_config.get("genesis_extra_connections", 0))
     weight_jitter = float(sim_config.get("genesis_weight_jitter", 0.05))
-    foraging_bias = float(sim_config.get("genesis_foraging_bias", 0.35))
+    foraging_bias = float(sim_config.get("genesis_foraging_bias", 0.0))
 
     genome_config = neat_config.genome_config
     genome_type = neat_config.genome_type
@@ -157,9 +157,9 @@ def bootstrap_population(population, neat_config, sim_config=None):
 def bootstrap_immigrant_genome(neat_config, sim_config=None):
     """Create one enhanced random genome for immigration or extinction reseeding."""
     sim_config = sim_config or {}
-    extra_hidden = int(sim_config.get("genesis_extra_hidden_nodes", 6))
-    extra_connections = int(sim_config.get("genesis_extra_connections", 20))
-    foraging_bias = float(sim_config.get("genesis_foraging_bias", 0.35))
+    extra_hidden = int(sim_config.get("genesis_extra_hidden_nodes", 0))
+    extra_connections = int(sim_config.get("genesis_extra_connections", 0))
+    foraging_bias = float(sim_config.get("genesis_foraging_bias", 0.0))
     genome_config = neat_config.genome_config
     genome = neat_config.genome_type(0)
     genome.configure_new(genome_config)
