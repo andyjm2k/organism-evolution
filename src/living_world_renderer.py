@@ -2,6 +2,7 @@
 
 import pygame
 
+from body_traits import BodyTraits, draw_body
 from camera import Camera
 from genome_viz import build_genome_surface
 from logging_util import log_detailed
@@ -257,18 +258,11 @@ class LivingWorldRenderer(RendererCommon):
         sx, sy = self._world_to_viewport(organism.position[0], organism.position[1])
         if not self._on_screen(sx, sy, 30):
             return
-        visual = self.get_species_visual(
-            str(organism.species_id),
-            organism.is_carnivore,
-            organism.get_radius(),
-            organism.calculate_spikes(),
-            organism.calculate_spike_length(),
-            num_nodes=organism.get_active_node_count(),
-        )
-        surface.blit(
-            visual,
-            (sx - visual.get_width() // 2, sy - visual.get_height() // 2),
-        )
+        # Each body is drawn from its own genome, so jaws and horns are not
+        # shared across a species that has already started to diverge.
+        traits = BodyTraits.from_organism(organism)
+        color = self.get_species_color(str(organism.species_id), organism.is_carnivore)
+        draw_body(surface, sx, sy, color, organism.get_radius(), traits)
 
     def _draw_selection(self, surface, organism):
         """Highlight the tracked organism."""
@@ -349,21 +343,24 @@ class LivingWorldRenderer(RendererCommon):
 
     def _draw_organism_panel(self, surface, organism):
         """Draw stats and genome graph for the selected organism."""
-        panel_w, panel_h = 280, 320
+        panel_w, panel_h = 300, 380
         panel = pygame.Rect(12, self.viewport_height - panel_h - 12, panel_w, panel_h)
         panel_surface = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
         panel_surface.fill((20, 24, 32, 230))
         pygame.draw.rect(panel_surface, (90, 110, 130), panel_surface.get_rect(), 1, 8)
         diet = "Carnivore" if organism.is_carnivore else "Herbivore"
         name = getattr(organism, "scientific_name", None) or f"Species {organism.species_id}"
+        traits = BodyTraits.from_organism(organism)
         lines = [
-            name[:28],
+            name[:32],
             f"{diet} | Energy {organism.energy:.0f}/{organism.max_energy:.0f}",
             f"Age {organism.steps_taken} steps",
             f"Food {organism.food_consumed} | Hunts {organism.organisms_consumed}",
             f"Fitness {organism.highest_fitness:.0f}",
             f"Genome {getattr(organism, 'genome_id', '?')}",
         ]
+        # Physical traits expressed by this genome, not a shared species template.
+        lines.extend(traits.panel_lines(organism))
         y = 12
         for index, line in enumerate(lines):
             color = (240, 245, 250) if index == 0 else (180, 190, 200)
