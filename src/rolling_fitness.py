@@ -11,6 +11,9 @@ class RollingFitnessTracker:
         self._offspring = {}
         # Weight configuration from simulation JSON.
         self.weights = weights
+        # Last meal and kill counts already credited, so each event scores once.
+        self._meals = {}
+        self._kills = {}
 
     def init_genome(self, genome_id):
         """Ensure a genome id has tracker slots."""
@@ -23,7 +26,7 @@ class RollingFitnessTracker:
 
     def record_offspring(self, parent_ids):
         """Credit parents when an in-world birth succeeds."""
-        weight = float(self.weights.get("fitness_offspring_weight", 500))
+        weight = float(self.weights.get("fitness_offspring_weight", 150))
         for genome_id in parent_ids:
             self.init_genome(genome_id)
             self._offspring[genome_id] = self._offspring.get(genome_id, 0) + 1
@@ -37,14 +40,21 @@ class RollingFitnessTracker:
         self.init_genome(genome_id)
         survival = float(self.weights.get("fitness_survival_weight", 0.5))
         self._scores[genome_id] += survival
+        # Credit each new meal or kill once. The old per-step trickle made one
+        # birth worth dozens of meals, so selection kept breeders over foragers.
         if organism.is_carnivore:
-            self._scores[genome_id] += float(
-                self.weights.get("fitness_kill_weight", 40)
-            ) * 0.001 * organism.organisms_consumed
+            total = int(getattr(organism, "organisms_consumed", 0))
+            previous = self._kills.get(genome_id, 0)
+            gained = max(0, total - previous)
+            self._kills[genome_id] = total
+            weight = float(self.weights.get("fitness_kill_weight", 100))
         else:
-            self._scores[genome_id] += float(
-                self.weights.get("fitness_food_weight", 15)
-            ) * 0.001 * organism.food_consumed
+            total = int(getattr(organism, "food_consumed", 0))
+            previous = self._meals.get(genome_id, 0)
+            gained = max(0, total - previous)
+            self._meals[genome_id] = total
+            weight = float(self.weights.get("fitness_food_weight", 100))
+        self._scores[genome_id] += weight * gained
 
     def finalize_death(self, organism, display_fitness=0.0):
         """Flush remaining display fitness into the selection score on death."""
