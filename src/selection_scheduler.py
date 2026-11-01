@@ -2,6 +2,8 @@
 
 import random
 
+from neat.species import Species
+
 from genome_bootstrap import bootstrap_immigrant_genome
 from logging_util import log_always
 
@@ -39,6 +41,7 @@ class SelectionScheduler:
                 sim_config,
                 5,
             )
+            self._refresh_species(population, registry, neat_config)
             return
         # Sync rolling fitness onto NEAT genomes before any selection work.
         fitness_tracker.apply_to_genomes(population.population)
@@ -63,6 +66,8 @@ class SelectionScheduler:
                 sim_config,
                 inject,
             )
+        # Re-cluster whoever is still alive so species ids follow the genomes.
+        self._refresh_species(population, registry, neat_config)
 
     def _inject_immigrants(
         self,
@@ -87,15 +92,22 @@ class SelectionScheduler:
                 break
             genome_id = genome.key
             population.population[genome_id] = genome
-            population.species.speciate(
-                neat_config, population.population, population.generation
-            )
+            # Place the immigrant against living species instead of re-clustering
+            # only the original NEAT pool, which would drop birth genomes.
+            assign_species(population, neat_config, genome)
             fitness_tracker.init_genome(genome_id)
             organism = registry.spawn_immigrant(genome, population, batch_engine)
             if organism is not None:
                 created += 1
         if created:
             log_always(f"Selection: injected {created} immigrant organisms")
+
+    def _refresh_species(self, population, registry, neat_config):
+        """Re-speciate living organisms and log how many species that yields."""
+        species_count = refresh_living_species(
+            population, neat_config, registry.alive_organisms()
+        )
+        log_always(f"Selection: {species_count} living species")
 
 
 def _create_immigrant_genome(population, neat_config, top_ids, sim_config=None):
@@ -122,3 +134,57 @@ def _create_immigrant_genome(population, neat_config, top_ids, sim_config=None):
     genome = bootstrap_immigrant_genome(neat_config, sim_config)
     genome.key = genome_id
     return genome
+
+
+def assign_species(population, neat_config, genome):
+    """Put a genome in the nearest species, or start a species when it is too far."""
+    # Threshold is the neat-config compatibility distance, not a fixed cutoff.
+    threshold = population.species.species_set_config.compatibility_threshold
+    genome_config = neat_config.genome_config
+    best_sid = None
+    best_distance = None
+    for sid, species in population.species.species.items():
+        representative = species.representative
+        if representative is None:
+            continue
+        # Distance uses the same formula as NEAT speciation.
+        distance = genome.distance(representative, genome_config)
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+            best_sid = sid
+    # No living species, or farther than the threshold: this genome founds one.
+    if best_sid is None or best_distance >= threshold:
+        sid = next(population.species.indexer)
+        created = Species(sid, population.generation)
+        created.representative = genome
+        created.members = {genome.key: genome}
+        population.species.species[sid] = created
+        population.species.genome_to_species[genome.key] = sid
+        return sid
+    species = population.species.species[best_sid]
+    species.members[genome.key] = genome
+    population.species.genome_to_species[genome.key] = best_sid
+    return best_sid
+
+
+def refresh_living_species(population, neat_config, organisms):
+    """Re-speciate the current living genomes and write species ids back."""
+    living = {}
+    for organism in organisms:
+        # Dead organisms must not anchor a species representative.
+        if organism.energy <= 0 or organism.genome is None:
+            continue
+        organism.genome.key = organism.genome_id
+        living[organism.genome_id] = organism.genome
+    if not living:
+        return 0
+    # Drop stale species first. More old species than living genomes makes
+    # NEAT's speciate step fail when it looks for a new representative.
+    population.species.species = {}
+    population.species.genome_to_species = {}
+    population.species.speciate(neat_config, living, population.generation)
+    for organism in organisms:
+        sid = population.species.genome_to_species.get(organism.genome_id)
+        if sid is not None:
+            organism.species_id = sid
+    return len(population.species.species)
