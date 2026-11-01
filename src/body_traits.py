@@ -9,6 +9,8 @@ import math
 
 import pygame
 
+from distance import colliding
+
 # NEAT input key = -(channel index) - 1. These match network_inputs.py.
 # Food channels are 9-15, prey or threat channels are 16-22, core body is 0-8.
 _FOOD_CHANNELS = range(9, 16)
@@ -102,10 +104,46 @@ class BodyTraits:
         )
         return [(label, strength) for label, strength in named if strength >= _VISIBLE_STRENGTH]
 
+    def food_reach_bonus(self):
+        """Extra world units a jaw adds to herbivore bite range."""
+        # Founder jaws are about 3.6, which reaches a few units past the body.
+        return min(12.0, self.jaw * 1.25)
+
+    def food_energy_multiplier(self):
+        """How much more energy a jaw pulls from one pellet."""
+        return 1.0 + min(0.6, self.jaw * 0.06)
+
+    def hunt_reach_bonus(self):
+        """Extra world units claws add to a carnivore's grab range."""
+        return min(14.0, self.claw * 2.0)
+
+    def prey_energy_fraction(self):
+        """Share of prey energy a bite takes. Jaws raise the share."""
+        return min(0.95, 0.7 + self.jaw * 0.03)
+
+    def effective_speed(self, base_speed):
+        """Speed after flagella. No flagella leaves the base speed unchanged."""
+        return float(base_speed) * (1.0 + min(1.0, self.flagella * 0.18))
+
+    def movement_cost_multiplier(self):
+        """Flagella burn more energy per step of movement."""
+        return 1.0 + min(0.8, self.flagella * 0.12)
+
+    def horn_reach_bonus(self):
+        """Extra world units a horn reaches beyond the body."""
+        return min(8.0, self.horn * 1.0)
+
+    def horn_damage(self, size):
+        """Energy removed by one horn strike. Scales with horn and body size."""
+        if self.horn < _VISIBLE_STRENGTH:
+            return 0.0
+        return self.horn * max(0.2, float(size)) * 2.0
+
     def panel_lines(self, organism):
         """Text rows for the living-world inspection panel."""
-        # Size and speed are the body stats already derived from node and wire counts.
-        lines = [f"Size {organism.size:.2f} | Speed {organism.speed:.2f}"]
+        # Shown speed includes flagella, so the panel matches how fast the body moves.
+        speed = self.effective_speed(getattr(organism, "speed", 0.0))
+        lines = [f"Size {organism.size:.2f} | Speed {speed:.2f}"]
         labels = [f"{label} {strength:.1f}" for label, strength in self.present()]
         if not labels:
             lines.append("Body: plain cell")
@@ -115,6 +153,28 @@ class BodyTraits:
         if len(labels) > 2:
             lines.append("      " + " | ".join(labels[2:]))
         return lines
+
+
+def apply_horn_strikes(attacker, organisms):
+    """Stab the other diet when a horn reaches them. Herds do not gore themselves."""
+    traits = BodyTraits.from_organism(attacker)
+    damage = traits.horn_damage(getattr(attacker, "size", 1.0))
+    if damage <= 0.0 or getattr(attacker, "position", None) is None:
+        return
+    # Horn reach is the body radius plus a bonus from horn-wire strength.
+    reach = attacker.get_radius() + traits.horn_reach_bonus()
+    attacker_carnivore = bool(getattr(attacker, "is_carnivore", False))
+    for other in organisms:
+        if other is attacker or getattr(other, "energy", 0) <= 0:
+            continue
+        if getattr(other, "position", None) is None:
+            continue
+        # Same diet is not a target, so horned herbivores can crowd safely.
+        if bool(getattr(other, "is_carnivore", False)) == attacker_carnivore:
+            continue
+        if not colliding(attacker.position, reach, other.position, other.get_radius()):
+            continue
+        other.energy = max(0.0, other.energy - damage)
 
 
 def draw_body(surface, x, y, color, radius, traits):
