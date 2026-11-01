@@ -33,21 +33,26 @@ def _entities_in_radius(organism, entities, radius):
     return ranked
 
 
-def _pack_entity_channels(organism, entity, dist_sq, radius):
+def _pack_entity_channels(organism, entity, dist_sq, radius, unit_direction=False):
     """Pack dist_norm, dx_norm, dy_norm for one sensed entity."""
+    # Linear distance is the radius scale for the separate distance channel.
     best_dist = math.sqrt(dist_sq)
     dist_norm = min(1.0, best_dist / max(radius, 1.0))
     dx = entity.position[0] - organism.position[0]
     dy = entity.position[1] - organism.position[1]
-    dx_norm, dy_norm = _normalize_vector(dx, dy, radius)
+    # Food uses a unit vector so a large detection radius cannot shrink steering.
+    # Other senses stay radius-scaled so their existing weights keep their meaning.
+    scale = best_dist if unit_direction else radius
+    dx_norm, dy_norm = _normalize_vector(dx, dy, scale)
     return dist_norm, dx_norm, dy_norm
 
 
-def _closest_entities(organism, entities, radius):
+def _closest_entities(organism, entities, radius, unit_direction=False):
     """
     Return nearest (count, dist, dx, dy) and second-nearest (dist, dx, dy).
 
     Nearest block uses local density; second block omits count.
+    unit_direction packs dx/dy as a unit vector instead of dx/radius.
     """
     ranked = _entities_in_radius(organism, entities, radius)
     if not ranked:
@@ -56,12 +61,16 @@ def _closest_entities(organism, entities, radius):
     nearest_dist, nearest_entity = ranked[0]
     nearest = (
         count_norm,
-        *_pack_entity_channels(organism, nearest_entity, nearest_dist, radius),
+        *_pack_entity_channels(
+            organism, nearest_entity, nearest_dist, radius, unit_direction
+        ),
     )
     if len(ranked) < 2:
         return nearest, _EMPTY_SECOND
     second_dist, second_entity = ranked[1]
-    second = _pack_entity_channels(organism, second_entity, second_dist, radius)
+    second = _pack_entity_channels(
+        organism, second_entity, second_dist, radius, unit_direction
+    )
     return nearest, second
 
 
@@ -137,7 +146,10 @@ def build_network_inputs(
         inputs.extend([0.0, 1.0, 0.0, 0.0])
         inputs.extend(list(_EMPTY_SECOND))
     else:
-        food_near, food_second = _closest_entities(organism, nearby_food, food_radius)
+        # Unit food direction: distance stays on its own channel.
+        food_near, food_second = _closest_entities(
+            organism, nearby_food, food_radius, unit_direction=True
+        )
         inputs.extend(list(food_near))
         inputs.extend(list(food_second))
     if organism.is_carnivore:

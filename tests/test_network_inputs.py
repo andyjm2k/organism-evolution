@@ -73,6 +73,24 @@ class TestNetworkInputs(unittest.TestCase):
         inputs = build_network_inputs(carnivore, [food], [], [], [], self.env)
         self.assertEqual(inputs[9:16], [0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
 
+    def test_food_direction_is_a_unit_vector(self):
+        """Nearest food dx/dy keep full strength inside a large sense radius."""
+        herbivore = _make_organism(False)
+        # 60 units east. Radius scaling would leave dx at 60/300 = 0.2.
+        food = SimpleNamespace(position=(160.0, 100.0))
+        inputs = build_network_inputs(herbivore, [food], [], [], [], self.env)
+        self.assertAlmostEqual(inputs[10], 60.0 / 300.0, places=5)
+        self.assertAlmostEqual(inputs[11], 1.0, places=5)
+        self.assertAlmostEqual(inputs[12], 0.0, places=5)
+        # A diagonal pellet is still a unit vector, with distance kept separate.
+        diagonal = SimpleNamespace(position=(130.0, 140.0))
+        diagonal_inputs = build_network_inputs(
+            herbivore, [diagonal], [], [], [], self.env
+        )
+        self.assertAlmostEqual(diagonal_inputs[10], 50.0 / 300.0, places=5)
+        self.assertAlmostEqual(diagonal_inputs[11], 0.6, places=5)
+        self.assertAlmostEqual(diagonal_inputs[12], 0.8, places=5)
+
     def test_closest_entity_prefers_nearer_candidate(self):
         from network_inputs import _closest_entity
 
