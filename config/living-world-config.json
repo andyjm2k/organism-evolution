@@ -40,10 +40,10 @@
     "genesis_weight_jitter": 0.05,
     "genesis_foraging_bias": 0.0,
 
-    "fitness_offspring_weight": 500,
+    "fitness_offspring_weight": 150,
     "fitness_survival_weight": 0.5,
-    "fitness_food_weight": 15,
-    "fitness_kill_weight": 40,
+    "fitness_food_weight": 100,
+    "fitness_kill_weight": 100,
 
     "render": true,
     "render_backend": "pygame",

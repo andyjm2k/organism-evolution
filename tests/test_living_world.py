@@ -130,6 +130,27 @@ class TestRollingFitness(unittest.TestCase):
         tracker.tick_alive(organism)
         self.assertEqual(tracker.get(5), 2.0)
 
+    def test_each_meal_scores_once_near_a_birth(self):
+        """A meal is credited once and is the same order as one offspring."""
+        tracker = RollingFitnessTracker(
+            {"fitness_survival_weight": 0.0, "fitness_food_weight": 100, "fitness_offspring_weight": 150}
+        )
+        organism = MagicMock()
+        organism.genome_id = 7
+        organism.is_carnivore = False
+        organism.food_consumed = 1
+        organism.organisms_consumed = 0
+        tracker.tick_alive(organism)
+        self.assertEqual(tracker.get(7), 100)
+        # Holding that meal for more steps must not multiply the reward.
+        tracker.tick_alive(organism)
+        self.assertEqual(tracker.get(7), 100)
+        organism.food_consumed = 2
+        tracker.tick_alive(organism)
+        self.assertEqual(tracker.get(7), 200)
+        tracker.record_offspring([7])
+        self.assertEqual(tracker.get(7), 350)
+
     def test_finalize_death_adds_display_fitness(self):
         tracker = RollingFitnessTracker({})
         organism = MagicMock()

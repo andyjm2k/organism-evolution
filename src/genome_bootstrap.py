@@ -6,13 +6,12 @@ from logging_util import log_always
 
 # Sensor channels (network_inputs.py) as NEAT keys: key = -(index) - 1.
 # Food dx/dy are channels 11 and 12. Prey dx/dy are 18 and 19.
-# Partner dx/dy are channels 25 and 26.
+# Mate dx/dy are channels 25 and 26 and stay unwired so courtship cannot
+# outpull a meal. Breeding still uses the breed output when a mate is near.
 _FOOD_DX_INPUT = -12
 _FOOD_DY_INPUT = -13
 _PREY_DX_INPUT = -19
 _PREY_DY_INPUT = -20
-_PARTNER_DX_INPUT = -26
-_PARTNER_DY_INPUT = -27
 
 # Motor outputs. 0 and 1 are signed velocity, not a heading angle.
 _VX_OUTPUT = 0
@@ -21,14 +20,13 @@ _BREED_OUTPUT = 2
 _REST_OUTPUT = 3
 
 # Shared day-0 genome. Every founder starts here; births inherit and mutate it.
-# Food and prey outweigh a mate, so a visible meal pulls harder than courtship.
+# Food and prey pull velocity. Mates are sensed and can trigger breeding,
+# but they do not steer the body.
 _FOUNDING_WIRES = (
     (_FOOD_DX_INPUT, _VX_OUTPUT, 1.8),
     (_FOOD_DY_INPUT, _VY_OUTPUT, 1.8),
     (_PREY_DX_INPUT, _VX_OUTPUT, 1.8),
     (_PREY_DY_INPUT, _VY_OUTPUT, 1.8),
-    (_PARTNER_DX_INPUT, _VX_OUTPUT, 0.65),
-    (_PARTNER_DY_INPUT, _VY_OUTPUT, 0.65),
 )
 _FOUNDING_BIASES = {
     _VX_OUTPUT: 0.2,

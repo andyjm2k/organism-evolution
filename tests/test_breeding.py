@@ -111,6 +111,8 @@ class TestEpisodeBreeding(unittest.TestCase):
         )
         parent_a.energy = 200
         parent_b.energy = 200
+        parent_a.food_consumed = 1
+        parent_b.food_consumed = 1
         parent_a.steps_since_breeding = 1000
         parent_b.steps_since_breeding = 1000
         # Mock simulation captures register_episode_child calls.
@@ -150,6 +152,8 @@ class TestEpisodeBreeding(unittest.TestCase):
         )
         parent_a.energy = 200
         parent_b.energy = 200
+        parent_a.food_consumed = 1
+        parent_b.food_consumed = 1
         parent_a.steps_since_breeding = 1000
         parent_b.steps_since_breeding = 1000
         captured = []
@@ -191,6 +195,8 @@ class TestEpisodeBreeding(unittest.TestCase):
         )
         parent_a.energy = 200
         parent_b.energy = 200
+        parent_a.food_consumed = 1
+        parent_b.food_consumed = 1
         parent_a.steps_since_breeding = 1000
         parent_b.steps_since_breeding = 1000
         queued = []
@@ -228,6 +234,8 @@ class TestEpisodeBreeding(unittest.TestCase):
         )
         parent_a.energy = 200
         parent_b.energy = 200
+        parent_a.food_consumed = 1
+        parent_b.food_consumed = 1
         parent_a.steps_since_breeding = 200
         parent_b.steps_since_breeding = 200
         captured = []
@@ -264,6 +272,8 @@ class TestEpisodeBreeding(unittest.TestCase):
         )
         parent_a.energy = 200
         parent_b.energy = 200
+        parent_a.food_consumed = 1
+        parent_b.food_consumed = 1
         parent_a.steps_since_breeding = 200
         parent_b.steps_since_breeding = 200
 

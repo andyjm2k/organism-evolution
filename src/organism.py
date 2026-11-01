@@ -329,9 +329,13 @@ class Organism:
                 break
 
     def can_breed(self):
-        """Return True when energy, cooldown, and boundary rules allow breeding."""
+        """Return True when energy, a meal, cooldown, and boundaries allow breeding."""
         # Unified energy gate (was inconsistently 50 vs 100).
         if self.energy < 100:
+            return False
+        # Starting energy is not income. A herbivore meal or a carnivore kill
+        # has to happen before that reserve is spent on a child.
+        if self.food_consumed <= 0 and self.organisms_consumed <= 0:
             return False
         if self.steps_since_breeding < self.breeding_cooldown:
             return False

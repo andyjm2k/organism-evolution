@@ -112,6 +112,12 @@ def _create_immigrant_genome(population, neat_config, top_ids, sim_config=None):
         for connection in genome.connections.values():
             connection.enabled = True
         genome.key = genome_id
+        # Species ids are not a diet. Copy the parent role, and default to the
+        # herbivore founders so a reseed can eat the plants in the world.
+        diet = getattr(parent_a, "diet_key", None)
+        if diet is None:
+            diet = getattr(parent_b, "diet_key", None)
+        genome.diet_key = 1 if diet is None else diet
         return genome
     genome = bootstrap_immigrant_genome(neat_config, sim_config)
     genome.key = genome_id
