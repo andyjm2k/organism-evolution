@@ -48,6 +48,21 @@ class TestNeatConfig(unittest.TestCase):
         )
         self.assertEqual(len(population.population), config.pop_size)
 
+    def test_compatibility_threshold_admits_structural_species(self):
+        """Threshold is low enough that one new node can leave its parents' species."""
+        root = Path(__file__).resolve().parents[1]
+        config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            str(root / "config" / "neat-config.ini"),
+        )
+        self.assertEqual(config.species_set_config.compatibility_threshold, 1.0)
+        self.assertGreaterEqual(
+            config.genome_config.compatibility_disjoint_coefficient, 2.0
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

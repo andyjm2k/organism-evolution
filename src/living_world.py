@@ -15,7 +15,7 @@ from organism import Organism
 from population_registry import PopulationRegistry
 from rolling_fitness import RollingFitnessTracker
 from scoreboard import Scoreboard
-from selection_scheduler import SelectionScheduler
+from selection_scheduler import SelectionScheduler, assign_species
 from spatial import SpatialGrid
 from world_clock import WorldClock
 
@@ -112,6 +112,12 @@ class LivingWorldSimulation:
         genome_id = self.registry.add_birth(
             child_genome, child, self._batch_engine
         )
+        # Species follows genetic distance. A child that adds a node can leave
+        # its parents' species instead of keeping their id forever.
+        if self.population is not None:
+            child.species_id = assign_species(
+                self.population, self.neat_config, child_genome
+            )
         child.simulation = self
         self.fitness_tracker.init_genome(genome_id)
         self.fitness_tracker.record_offspring(
