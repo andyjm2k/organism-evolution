@@ -87,12 +87,27 @@ class TestOrganism(unittest.TestCase):
         self.assertIsNotNone(food.position)
 
     def test_can_breed_energy_gate_is_unified(self):
-        # Breeding requires energy >= 100 (unified gate).
+        # Breeding requires energy >= 100 (unified gate) and a prior meal.
         organism = _make_organism(position=(400, 300))
         organism.energy = 99
         organism.steps_since_breeding = 200
+        organism.food_consumed = 1
         self.assertFalse(organism.can_breed())
         organism.energy = 100
+        self.assertTrue(organism.can_breed())
+
+    def test_can_breed_requires_a_meal(self):
+        """Starting energy alone cannot fund a birth."""
+        organism = _make_organism(position=(400, 300))
+        organism.energy = 200
+        organism.steps_since_breeding = 200
+        organism.food_consumed = 0
+        organism.organisms_consumed = 0
+        self.assertFalse(organism.can_breed())
+        organism.food_consumed = 1
+        self.assertTrue(organism.can_breed())
+        organism.food_consumed = 0
+        organism.organisms_consumed = 1
         self.assertTrue(organism.can_breed())
 
     def test_new_organism_cannot_breed_immediately(self):
@@ -105,6 +120,7 @@ class TestOrganism(unittest.TestCase):
     def test_cooldown_blocks_breeding_until_threshold(self):
         organism = _make_organism(position=(400, 300))
         organism.energy = 200
+        organism.food_consumed = 1
         organism.breeding_cooldown = 200
         organism.steps_since_breeding = 199
         self.assertFalse(organism.can_breed())
