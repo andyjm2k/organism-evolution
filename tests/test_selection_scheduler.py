@@ -137,10 +137,42 @@ class TestCreateImmigrantGenome(unittest.TestCase):
             genome_config, -1, 0, innovation
         )
         fitter.connections[connection.key] = connection
+        fitter.diet_key = 1
+        other.diet_key = 1
         with patch.object(neat.DefaultGenome, "mutate", lambda self, config: None):
             genome = _create_immigrant_genome(population, neat_config, ids)
         self.assertIsNotNone(genome)
         self.assertIn((-1, 0), genome.connections)
+        self.assertEqual(genome.diet_key, 1)
+
+    def test_crossover_without_parent_diet_stays_herbivore(self):
+        """A missing diet must not fall through to the species-id carnivore rule."""
+        neat_config = _neat_config()
+        population = neat.Population(neat_config)
+        ids = list(population.population.keys())[:2]
+        for genome_id in ids:
+            population.population[genome_id].fitness = 1.0
+        with patch.object(neat.DefaultGenome, "mutate", lambda self, config: None):
+            genome = _create_immigrant_genome(population, neat_config, ids)
+        self.assertEqual(genome.diet_key, 1)
+
+    def test_extinction_reseed_spawns_herbivores(self):
+        """Crossover immigrants eat plants instead of becoming hunter-only."""
+        neat_config = _neat_config()
+        population = neat.Population(neat_config)
+        for genome in population.population.values():
+            genome.diet_key = 1
+            genome.fitness = 1.0
+        registry = PopulationRegistry(10, _env_config(), neat_config, "normal")
+        tracker = RollingFitnessTracker({})
+        for genome_id in list(population.population.keys())[:2]:
+            tracker.init_genome(genome_id)
+            tracker._scores[genome_id] = 50
+        scheduler = SelectionScheduler(100, 10, 0.2, immigration_rate=1.0)
+        scheduler.run(population, registry, tracker, None, neat_config)
+        alive = registry.alive_organisms()
+        self.assertGreater(len(alive), 0)
+        self.assertTrue(all(not org.is_carnivore for org in alive))
 
 
 if __name__ == "__main__":
