@@ -9,9 +9,15 @@ import neat
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from genome_bootstrap import install_founding_motif
 from population_registry import PopulationRegistry
 from rolling_fitness import RollingFitnessTracker
-from selection_scheduler import SelectionScheduler, _create_immigrant_genome
+from selection_scheduler import (
+    SelectionScheduler,
+    _create_immigrant_genome,
+    assign_species,
+    refresh_living_species,
+)
 
 
 def _neat_config():
@@ -173,6 +179,69 @@ class TestCreateImmigrantGenome(unittest.TestCase):
         alive = registry.alive_organisms()
         self.assertGreater(len(alive), 0)
         self.assertTrue(all(not org.is_carnivore for org in alive))
+
+
+class TestLivingSpeciation(unittest.TestCase):
+    """Cover distance-based species assignment for living genomes."""
+
+    def _founding_population(self):
+        """Return a population whose first genome carries the founding wires."""
+        neat_config = _neat_config()
+        population = neat.Population(neat_config)
+        genome = next(iter(population.population.values()))
+        genome.fitness = 1.0
+        install_founding_motif(genome, neat_config.genome_config)
+        # Start species from this motif rather than the unconnected NEAT draw.
+        population.species.species = {}
+        population.species.genome_to_species = {}
+        assign_species(population, neat_config, genome)
+        return neat_config, population, genome
+
+    def test_weight_jitter_stays_with_founders(self):
+        """Small weight noise must not isolate a genome from its parents."""
+        neat_config, population, genome = self._founding_population()
+        parent_sid = population.species.get_species_id(genome.key)
+        child = neat_config.genome_type(888001)
+        child.fitness = 1.0
+        child.configure_crossover(genome, genome, neat_config.genome_config)
+        for connection in child.connections.values():
+            connection.weight += 0.05
+        child_sid = assign_species(population, neat_config, child)
+        self.assertEqual(child_sid, parent_sid)
+
+    def test_added_node_founds_a_species(self):
+        """A new hidden node is far enough to leave the founding species."""
+        neat_config, population, genome = self._founding_population()
+        parent_sid = population.species.get_species_id(genome.key)
+        child = neat_config.genome_type(888002)
+        child.fitness = 1.0
+        child.configure_crossover(genome, genome, neat_config.genome_config)
+        child.mutate_add_node(neat_config.genome_config)
+        child_sid = assign_species(population, neat_config, child)
+        self.assertNotEqual(child_sid, parent_sid)
+
+    def test_refresh_writes_species_ids_onto_organisms(self):
+        """Selection re-speciation updates the ids organisms use for mating."""
+        neat_config, population, genome = self._founding_population()
+        sibling = neat_config.genome_type(888003)
+        sibling.fitness = 1.0
+        sibling.configure_crossover(genome, genome, neat_config.genome_config)
+        for connection in sibling.connections.values():
+            connection.weight += 0.02
+        parent = type("Org", (), {})()
+        parent.genome = genome
+        parent.genome_id = genome.key
+        parent.energy = 10
+        parent.species_id = None
+        child = type("Org", (), {})()
+        child.genome = sibling
+        child.genome_id = sibling.key
+        child.energy = 10
+        child.species_id = None
+        count = refresh_living_species(population, neat_config, [parent, child])
+        self.assertGreaterEqual(count, 1)
+        self.assertEqual(parent.species_id, child.species_id)
+        self.assertIsNotNone(parent.species_id)
 
 
 if __name__ == "__main__":
