@@ -10,8 +10,10 @@ import pygame
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from body_traits import BodyTraits, draw_body
+from body_traits import BodyTraits, apply_horn_strikes, draw_body
+from food import Food
 from genome_bootstrap import install_founding_motif
+from organism import Organism
 
 
 def _neat_config():
@@ -36,6 +38,33 @@ def _founding_genome():
     genome.fitness = 1.0
     install_founding_motif(genome, config.genome_config)
     return config, genome
+
+
+def _living(genome, config, position, is_carnivore):
+    """Real organism so bite, horn, and speed effects can be exercised."""
+    env = {
+        "width": 800,
+        "height": 600,
+        "detection_radius": 200,
+        "food_detection_radius": 300,
+        "threat_detection_radius": 100,
+        "breeding_detection_radius": 150,
+        "boundary_penalty": 0.5,
+        "starting_energy": 200,
+        "food_energy_value": 40,
+        "movement_cost": 0.05,
+    }
+    organism = Organism(
+        genome,
+        config,
+        position,
+        env,
+        species_id=1,
+        diet_key=1 if not is_carnivore else 2,
+        logging_level="normal",
+    )
+    organism.is_carnivore = is_carnivore
+    return organism
 
 
 def _organism(genome, is_carnivore):
@@ -122,6 +151,100 @@ class TestBodyTraits(unittest.TestCase):
         after = pygame.image.tostring(surface, "RGBA")
         self.assertNotEqual(before, after)
         pygame.quit()
+
+    def test_jaw_reaches_farther_and_yields_more_energy(self):
+        """A jaw bites beyond the body and takes more energy from a pellet."""
+        config, genome = _founding_genome()
+        jawed = _living(genome, config, (100, 100), False)
+        _config_b, plain_genome = _founding_genome()
+        plain = _living(plain_genome, _config_b, (100, 100), False)
+        for connection in plain.genome.connections.values():
+            connection.enabled = False
+        # Just outside the body, inside the jaw's extra reach.
+        offset = jawed.get_radius() + 5 + 2
+        near = Food(100 + offset, 100)
+        far = Food(100 + offset, 100)
+        before_jaw = jawed.energy
+        before_plain = plain.energy
+        jawed.check_for_food([near])
+        plain.check_for_food([far])
+        self.assertIsNone(near.position)
+        self.assertIsNotNone(far.position)
+        self.assertGreater(jawed.energy - before_jaw, 0)
+        # A pellet in contact range yields more to the jaw. Keep both below
+        # their energy cap so the extra yield is not clipped.
+        touched_jaw = Food(102, 100)
+        touched_plain = Food(102, 100)
+        jawed.energy = 50
+        plain.energy = 50
+        jaw_start = jawed.energy
+        plain_start = plain.energy
+        jawed.check_for_food([touched_jaw])
+        plain.check_for_food([touched_plain])
+        self.assertGreater(jawed.energy - jaw_start, plain.energy - plain_start)
+
+    def test_claws_grab_prey_beyond_body_contact(self):
+        """Claws catch a herbivore that is not touching the hunter's body."""
+        config, genome = _founding_genome()
+        hunter = _living(genome, config, (100, 100), True)
+        _config_b, prey_genome = _founding_genome()
+        prey = _living(prey_genome, _config_b, (100, 100), False)
+        gap = hunter.get_radius() + prey.get_radius() + 3
+        prey.position = (100 + gap, 100)
+        before = prey.energy
+        hunter.hunt_prey([hunter, prey])
+        self.assertLess(prey.energy, before)
+        self.assertGreater(prey.energy, 0)
+        self.assertEqual(hunter.organisms_consumed, 0)
+
+    def test_horn_damages_the_other_diet_only(self):
+        """A herbivore horn stabs a carnivore and leaves another grazer alone."""
+        config, genome = _founding_genome()
+        grazer = _living(genome, config, (50, 50), False)
+        _config_b, hunter_genome = _founding_genome()
+        hunter = _living(hunter_genome, _config_b, (50, 50), True)
+        for connection in hunter.genome.connections.values():
+            connection.enabled = False
+        _config_c, friend_genome = _founding_genome()
+        friend = _living(friend_genome, _config_c, (50, 50), False)
+        for connection in friend.genome.connections.values():
+            connection.enabled = False
+        hunter.energy = 180
+        friend.energy = 180
+        apply_horn_strikes(grazer, [grazer, hunter, friend])
+        self.assertLess(hunter.energy, 180)
+        self.assertEqual(friend.energy, 180)
+
+    def test_flagella_increase_speed_and_movement_cost(self):
+        """Flagella move farther per step and spend more energy doing it."""
+        config, fast_genome = _founding_genome()
+        innovation = config.genome_config.innovation_tracker.get_innovation_number(
+            -1, 0, "flagellum-speed"
+        )
+        connection = fast_genome.create_connection(
+            config.genome_config, -1, 0, innovation
+        )
+        connection.weight = 2.0
+        connection.enabled = True
+        fast_genome.connections[connection.key] = connection
+        _config_b, slow_genome = _founding_genome()
+        fast = _living(fast_genome, config, (200, 200), False)
+        slow = _living(slow_genome, _config_b, (200, 200), False)
+
+        class _FixedNet:
+            """Network stub so both bodies try to move the same way."""
+
+            def activate(self, _inputs):
+                return (1.0, 0.0, -1.0, -1.0)
+
+        for organism in (fast, slow):
+            organism.network = _FixedNet()
+            organism._compiled_network = None
+            organism.energy = 150
+        fast.take_action([], [], [], [])
+        slow.take_action([], [], [], [])
+        self.assertGreater(fast.position[0], slow.position[0])
+        self.assertLess(fast.energy, slow.energy)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import random
 
 import neat
 
+from body_traits import BodyTraits, apply_horn_strikes
 from distance import colliding, distance, within_radius
 from fitness import calculate_fitness
 from logging_util import log_detailed
@@ -188,18 +189,22 @@ class Organism:
         width = self.environment_config.get("width", 800)
         height = self.environment_config.get("height", 600)
         move_x = move_y = 0.0
+        # Flagella raise speed and the energy spent to use that speed.
+        traits = BodyTraits.from_organism(self)
+        speed = traits.effective_speed(self.speed)
         if rest_desire <= 0.5:
-            move_x = self.speed * vx
-            move_y = self.speed * vy
-            move_x += random.uniform(-0.01, 0.01) * self.speed
-            move_y += random.uniform(-0.01, 0.01) * self.speed
+            move_x = speed * vx
+            move_y = speed * vy
+            move_x += random.uniform(-0.01, 0.01) * speed
+            move_y += random.uniform(-0.01, 0.01) * speed
         new_x = max(0, min(self.position[0] + move_x, width))
         new_y = max(0, min(self.position[1] + move_y, height))
         if abs(move_x) > 0 or abs(move_y) > 0:
             self.position = (new_x, new_y)
             self.was_moving = True
             self._append_trail_point(self.position)
-            self.energy = max(0, self.energy - self.movement_energy_cost)
+            step_cost = self.movement_energy_cost * traits.movement_cost_multiplier()
+            self.energy = max(0, self.energy - step_cost)
         else:
             self.was_moving = False
         if breeding_desire > 0.5 and self.can_breed():
@@ -231,6 +236,8 @@ class Organism:
             self.last_positions.pop(0)
         # Boundary wrap with configurable energy penalty.
         self._apply_boundary_rules()
+        # Horns strike the other diet before bites resolve.
+        apply_horn_strikes(self, organisms)
         # Single consumption path (not duplicated in take_action).
         self.check_for_food(food_items)
         if self.is_carnivore:
@@ -273,11 +280,14 @@ class Organism:
             return
         food_energy = float(self.environment_config.get("food_energy_value", 75))
         food_radius = 5
+        # A jaw reaches past the body and pulls more energy from each pellet.
+        traits = BodyTraits.from_organism(self)
+        bite_radius = self.get_radius() + traits.food_reach_bonus()
         for food in food_items:
             if food.position is None:
                 continue
-            if colliding(self.position, self.get_radius(), food.position, food_radius):
-                gain = food_energy * self.energy_efficiency
+            if colliding(self.position, bite_radius, food.position, food_radius):
+                gain = food_energy * self.energy_efficiency * traits.food_energy_multiplier()
                 self.energy = min(self.max_energy, self.energy + gain)
                 self.food_consumed += 1
                 if self.steps_since_last_food > 0:
@@ -297,6 +307,9 @@ class Organism:
         """Carnivores consume one eligible smaller prey on collision."""
         if self.energy <= 0 or not self.is_carnivore:
             return
+        # Claws extend grab range. Jaws raise how much of the prey is swallowed.
+        traits = BodyTraits.from_organism(self)
+        grab_radius = self.get_radius() + traits.hunt_reach_bonus()
         for other in organisms:
             if (
                 other is self
@@ -306,27 +319,42 @@ class Organism:
                 or self.position is None
             ):
                 continue
-            if not colliding(
+            body_hit = colliding(
                 self.position, self.get_radius(), other.position, other.get_radius()
-            ):
+            )
+            claw_hit = colliding(
+                self.position, grab_radius, other.position, other.get_radius()
+            )
+            if not claw_hit:
                 continue
             # May eat prey up to 80% of own size (inclusive margin via >=).
-            if self.size >= other.size * 0.8:
-                gain = other.energy * 0.7
+            if self.size < other.size * 0.8:
+                continue
+            if body_hit:
+                # A jaw swallows a larger share. Body contact is a killing bite.
+                gain = other.energy * traits.prey_energy_fraction()
                 self.energy = min(self.max_energy, self.energy + gain)
-                self.organisms_consumed += 1
                 other.energy = 0
+            else:
+                # Claws wound at range and do not finish the prey in one touch.
+                nick = min(other.energy, self.size * traits.claw * 2.0)
+                if nick <= 0:
+                    continue
+                other.energy -= nick
+                self.energy = min(self.max_energy, self.energy + nick * 0.5)
+            if other.energy <= 0:
+                self.organisms_consumed += 1
                 if self.steps_since_last_hunt > 0:
                     self.avg_steps_between_hunts.append(self.steps_since_last_hunt)
                     if len(self.avg_steps_between_hunts) > 10:
                         self.avg_steps_between_hunts.pop(0)
                 self.steps_since_last_hunt = 0
                 self.fitness_bonus += 25
-                log_detailed(
-                    self.logging_level,
-                    f"Carnivore ate prey; energy={self.energy:.1f}",
-                )
-                break
+            log_detailed(
+                self.logging_level,
+                f"Carnivore ate prey; energy={self.energy:.1f}",
+            )
+            break
 
     def can_breed(self):
         """Return True when energy, a meal, cooldown, and boundaries allow breeding."""
