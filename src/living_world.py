@@ -57,6 +57,12 @@ class LivingWorldSimulation:
             "offspring_starting_energy": self.sim_config.get(
                 "offspring_starting_energy", 50
             ),
+            "eggs_enabled": bool(self.sim_config.get("eggs_enabled", True)),
+            "egg_energy_goal": self.sim_config.get("egg_energy_goal", 80),
+            "egg_hatch_delay": self.sim_config.get("egg_hatch_delay", 150),
+            "hatch_maturity": self.sim_config.get("hatch_maturity", 0.35),
+            "growth_energy_cost": self.sim_config.get("growth_energy_cost", 0.15),
+            "growth_step": self.sim_config.get("growth_step", 0.004),
         }
         # Ecology and population subsystems.
         self.food_ecology = FoodEcology(self.sim_config)
@@ -104,6 +110,8 @@ class LivingWorldSimulation:
             self.renderer.set_environment_config(self.environment_config)
         self._pending_births = []
         self._birth_count = 0
+        # Eggs that have been laid and are waiting to hatch.
+        self._eggs = []
 
     def register_birth(self, child, child_genome, parent_a, parent_b):
         """Admit an in-world birth into the live population."""
@@ -130,6 +138,11 @@ class LivingWorldSimulation:
         self.fitness_tracker.record_offspring(
             [getattr(parent_a, "genome_id", None), getattr(parent_b, "genome_id", None)]
         )
+        # Who this body came from. Species replacement can be read off this.
+        child.parent_ids = (
+            getattr(parent_a, "genome_id", None),
+            getattr(parent_b, "genome_id", None),
+        )
         self._pending_births.append(child)
         self._birth_count += 1
         parent_a.fitness_bonus += 100
@@ -138,6 +151,20 @@ class LivingWorldSimulation:
             self.logging_level,
             f"Living birth genome={genome_id} species={child.species_id}",
         )
+
+    def receive_egg(self, egg):
+        """Accept a laid egg. It hatches on its own clock."""
+        self._eggs.append(egg)
+
+    def _tick_eggs(self):
+        """Hatch eggs whose delay has elapsed."""
+        waiting = []
+        for egg in self._eggs:
+            if egg.tick():
+                self.register_birth(egg.child, egg.child_genome, egg.parent, egg.partner)
+            else:
+                waiting.append(egg)
+        self._eggs = waiting
 
     def _nearby_entities(self, organism, organisms, food_grid, org_grid):
         """Return sensed entities using spatial grids."""
@@ -176,7 +203,8 @@ class LivingWorldSimulation:
         food_grid.clear()
         org_grid.clear()
         for food in self.food_ecology.food_items:
-            if food.position is not None:
+            # A regrowing symbiotic pellet is still in the world but not edible.
+            if food.position is not None and getattr(food, "regrow_in", 0) <= 0:
                 food_grid.insert(food, food.position)
         for other in organisms:
             if other.position is not None and other.energy > 0:
@@ -206,6 +234,9 @@ class LivingWorldSimulation:
                 self.fitness_tracker.finalize_death(
                     organism, organism.calculate_fitness()
                 )
+        # Hatch before the pending list is copied, so a new body is drawn
+        # this frame and first acts on the next one.
+        self._tick_eggs()
         if self._pending_births:
             next_organisms.extend(self._pending_births)
             self._pending_births.clear()
@@ -213,6 +244,7 @@ class LivingWorldSimulation:
             if self._batch_engine is not None:
                 self._batch_engine._networks.pop(genome_id, None)
         self.food_ecology.tick()
+        self.food_ecology.laid_eggs = self._eggs
         if self.clock.step % 500 == 0:
             self.food_ecology.prune_consumed()
         self.clock.tick()
@@ -291,8 +323,12 @@ class LivingWorldSimulation:
                     f"births {self._birth_count}"
                 )
             if self.renderer and self.clock.step % self.render_stride == 0:
+                # An epoch is a clock bucket for the log. It is not a new
+                # generation: the same organisms stay on screen, and
+                # set_generation would wipe their color cache as if the
+                # population had been replaced.
                 self.renderer.set_world_step(self.clock.step)
-                self.renderer.set_generation(self.clock.epoch)
+                self.renderer._eggs_to_draw = self._eggs
                 if not self.renderer.render(
                     organisms,
                     self.food_ecology.food_items,

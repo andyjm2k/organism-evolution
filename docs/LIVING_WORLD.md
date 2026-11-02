@@ -63,7 +63,7 @@ Every `selection_interval_steps`:
 
 Under the cap, natural deaths and births control headcount — selection never force-culls a below-capacity population. In-world births that would exceed the cap still displace the lowest-fitness organism so the limit is hard.
 
-Births join the species of the nearest living member. The compatibility threshold in `neat-config.ini` starts at 3.0, which is wider than one added node or connection, so offspring stay with their parents and a species can grow. Each selection pass re-clusters the living genomes. If that would form more than `max_species_count` species, the threshold is raised until the count is back inside the single digits, near `target_species_count`. If a previous raise left fewer than `min_species_count` species, the threshold relaxes back toward the ini value, and never below it. Species then have enough members to breed, and a lineage that forages or hunts better can replace the others.
+Births join the species of the nearest living member. The compatibility threshold in `neat-config.ini` starts at 3.0, which is wider than one added node or connection, so offspring stay with their parents and a species can grow. Each selection pass re-clusters the living genomes, then puts each cluster back on the species id its members already had. An epoch is only a clock reading for the log. It does not replace the population, mint new species ids, or recolor organisms that are still alive. If re-clustering would form more than `max_species_count` species, the threshold is raised until the count is back inside the single digits, near `target_species_count`. If a previous raise left fewer than `min_species_count` species, the threshold relaxes back toward the ini value, and never below it. Species then have enough members to breed, and a lineage that forages or hunts better can replace the others.
 
 When the population goes extinct, the scheduler automatically reseeds immigrants.
 
@@ -109,7 +109,13 @@ See `config/living-world-config.json` for defaults. Important keys:
 
 ### Feeding and breeding
 
-Movement and the decision to breed come from the four network outputs. Founders share one starting genome: sensed food and prey directions drive velocity, a mate is sensed but does not steer the body, the breed output begins willing, and the rest output begins off. Births inherit that wiring and mutate it. Eating, energy, and the breeding cooldown stay physical limits. A birth also requires a prior meal, so starting energy is not spent on children who have never eaten. Offspring keep the parent's diet, and founders are herbivores so the lineage can eat the plants in the world.
+Movement and the decision to breed come from the four network outputs. Founders share one starting genome: sensed food and prey directions drive velocity, a mate is sensed but does not steer the body, the breed output begins willing, and the rest output begins off. Births inherit that wiring and mutate it. Eating, energy, and the breeding cooldown stay physical limits. A birth also requires a prior meal, so starting energy is not spent on children who have never eaten.
+
+Color, diet, and size are body genes, separate from the network, in the same split The Bibites use. A child copies the fitter parent's genes and nudges them, so a lineage stays a recognizable color and diet while the brain changes. Founders start as green grazers. The diet gene, not the species id, decides who hunts. Species id is only who they can breed with.
+
+Living-world births are eggs. Two adults fertilize one, a parent fills it from their energy, and it hatches small. Maturity climbs toward the adult size while energy is spare, and only adults breed. Carnivores bite: health is life, energy is fuel. A killing bite is what removes the prey.
+
+Plant pellets belong to strains on the nutrient clouds. A strain's relation gene drifts slowly. Symbiotic plants regrow when grazed and seed more often. Indifferent plants are an ordinary meal. Predatory plants deal health damage when bitten. Strains start near indifferent so the founding grazers can eat.
 
 ### Genesis bootstrap
 

@@ -1,5 +1,6 @@
 """Headless tests for shared renderer helpers (RendererCommon)."""
 
+import random
 import sys
 import unittest
 from pathlib import Path
@@ -16,6 +17,20 @@ class TestRendererCommon(unittest.TestCase):
     def setUp(self):
         """Use a lightweight RendererCommon instance (no pygame window)."""
         self.common = RendererCommon(logging_level="normal")
+
+    def test_generation_tick_does_not_recolor_an_existing_species(self):
+        """A generation counter tick must not paint a known species a new color."""
+        color = self.common.get_species_color("4", False)
+        self.common.set_generation(10)
+        self.assertEqual(self.common.get_species_color("4", False), color)
+
+    def test_species_color_does_not_reset_the_world_rng(self):
+        """Painting a species must not reseed the RNG the simulation breeds with."""
+        random.seed(1234)
+        expected = random.random()
+        random.seed(1234)
+        self.common.get_species_color("99", True)
+        self.assertEqual(random.random(), expected)
 
     def test_species_color_normalized_in_unit_interval(self):
         """GPU colors should be RGB floats in 0..1."""

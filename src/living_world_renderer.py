@@ -2,6 +2,8 @@
 
 import pygame
 
+from body_genes import body_color
+from plant_strain import pellet_color
 from body_traits import BodyTraits, draw_body
 from camera import Camera
 from genome_viz import build_genome_surface
@@ -204,7 +206,15 @@ class LivingWorldRenderer(RendererCommon):
                 continue
             sx, sy = self._world_to_viewport(food.position[0], food.position[1])
             if self._on_screen(sx, sy, 6):
-                pygame.draw.circle(surface, (80, 220, 90), (sx, sy), 3)
+                color = pellet_color(food)
+                radius = 2 if getattr(food, "regrow_in", 0) > 0 else 3
+                pygame.draw.circle(surface, color, (sx, sy), radius)
+        for egg in getattr(self, "_eggs_to_draw", ()):
+            if getattr(egg, "position", None) is None:
+                continue
+            sx, sy = self._world_to_viewport(egg.position[0], egg.position[1])
+            if self._on_screen(sx, sy, 8):
+                pygame.draw.circle(surface, (230, 210, 160), (sx, sy), 4)
 
     def _draw_trails(self, surface, organisms):
         """Draw movement trails with camera offset applied."""
@@ -212,9 +222,7 @@ class LivingWorldRenderer(RendererCommon):
             trail = getattr(organism, "movement_trail", None)
             if not trail or len(trail) < 2:
                 continue
-            color = self.get_species_color(
-                str(organism.species_id), organism.is_carnivore
-            )
+            color = self._organism_color(organism)
             for index in range(1, len(trail)):
                 a = int(50 + 150 * index / len(trail))
                 c = (
@@ -251,6 +259,14 @@ class LivingWorldRenderer(RendererCommon):
             pygame.draw.circle(ring, color, (radius, radius), int(radius), 1)
             surface.blit(ring, (sx - radius, sy - radius))
 
+    def _organism_color(self, organism):
+        """Skin color from body genes, or the species color when a genome has none."""
+        # Genes are the Bibites pigment. Species id stays the breeding group.
+        pigment = body_color(organism)
+        if pigment is not None:
+            return pigment
+        return self.get_species_color(str(organism.species_id), organism.is_carnivore)
+
     def _draw_organism(self, surface, organism):
         """Blit one organism sprite at its world position."""
         if organism.position is None or organism.energy <= 0:
@@ -261,7 +277,7 @@ class LivingWorldRenderer(RendererCommon):
         # Each body is drawn from its own genome, so jaws and horns are not
         # shared across a species that has already started to diverge.
         traits = BodyTraits.from_organism(organism)
-        color = self.get_species_color(str(organism.species_id), organism.is_carnivore)
+        color = self._organism_color(organism)
         draw_body(surface, sx, sy, color, organism.get_radius(), traits)
 
     def _draw_selection(self, surface, organism):
@@ -321,14 +337,12 @@ class LivingWorldRenderer(RendererCommon):
             if food.position is None:
                 continue
             fx, fy = to_mini(food.position[0], food.position[1])
-            surface.set_at((fx, fy), (80, 200, 90))
+            surface.set_at((fx, fy), pellet_color(food))
         for organism in organisms[:300]:
             if organism.position is None or organism.energy <= 0:
                 continue
             ox, oy = to_mini(organism.position[0], organism.position[1])
-            color = self.get_species_color(
-                str(organism.species_id), organism.is_carnivore
-            )
+            color = self._organism_color(organism)
             pygame.draw.circle(surface, color, (ox, oy), 2)
         vx0, vy0, vx1, vy1 = self.camera.viewport_rect_world()
         mini_rect = pygame.Rect(
@@ -349,6 +363,9 @@ class LivingWorldRenderer(RendererCommon):
         panel_surface.fill((20, 24, 32, 230))
         pygame.draw.rect(panel_surface, (90, 110, 130), panel_surface.get_rect(), 1, 8)
         diet = "Carnivore" if organism.is_carnivore else "Herbivore"
+        genes = getattr(organism, "body_genes", None)
+        if genes is not None:
+            diet = f"{diet} {genes.diet:.2f}"
         name = getattr(organism, "scientific_name", None) or f"Species {organism.species_id}"
         traits = BodyTraits.from_organism(organism)
         lines = [
