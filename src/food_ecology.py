@@ -4,6 +4,7 @@ import math
 import random
 
 from food import Food
+from plant_strain import make_founder_strain
 
 
 class NutrientCloud:
@@ -61,6 +62,8 @@ class FoodEcology:
         self.food_items = []
         # Nutrient clouds that drive regrowth.
         self.clouds = []
+        # Laid eggs drawn by the living-world renderer. The simulation fills this.
+        self.laid_eggs = []
         self._seed_clouds(sim_config)
         self._seed_initial_food(sim_config)
 
@@ -75,11 +78,19 @@ class FoodEcology:
             y = random.uniform(margin, self.world_height - margin)
             radius = random.uniform(min_r, max_r)
             intensity = random.uniform(0.55, 1.0)
-            self.clouds.append(
-                NutrientCloud(
-                    x, y, radius, intensity, self.world_width, self.world_height
-                )
+            cloud = NutrientCloud(
+                x, y, radius, intensity, self.world_width, self.world_height
             )
+            # A few strains per cloud. Most start indifferent so founders can eat.
+            cloud.strains = [
+                make_founder_strain(),
+                make_founder_strain(),
+            ]
+            self.clouds.append(cloud)
+        if self.clouds:
+            # One cloud leans toward each pole without crossing the band yet.
+            self.clouds[0].strains[0].relation = 0.15
+            self.clouds[-1].strains[0].relation = -0.15
 
     def _seed_initial_food(self, sim_config):
         """Populate starting food near random clouds and open ground."""
@@ -92,21 +103,37 @@ class FoodEcology:
                 self.food_items.append(self._spawn_random())
 
     def _spawn_random(self):
-        """Spawn one food pellet at a random valid location."""
-        margin = 10
-        x = random.randint(margin, max(margin + 1, self.world_width - margin))
-        y = random.randint(margin, max(margin + 1, self.world_height - margin))
-        return Food(x, y)
+        """Spawn one indifferent pellet at a random valid location."""
+        return self._pellet(None, make_founder_strain(bias=0.0))
 
-    def _spawn_near_cloud(self, cloud):
+    def _pellet(self, cloud, strain):
+        """Place one pellet of a strain, optionally inside a cloud."""
+        if cloud is None:
+            margin = 10
+            x = random.randint(margin, max(margin + 1, self.world_width - margin))
+            y = random.randint(margin, max(margin + 1, self.world_height - margin))
+        else:
+            angle = random.uniform(0, 2 * math.pi)
+            dist = random.uniform(0, cloud.radius * 0.85)
+            x = int(cloud.position[0] + math.cos(angle) * dist)
+            y = int(cloud.position[1] + math.sin(angle) * dist)
+            x = max(5, min(x, self.world_width - 5))
+            y = max(5, min(y, self.world_height - 5))
+        food = Food(x, y, strain=strain)
+        food.cloud = cloud
+        food.ecology = self
+        return food
+
+    def _pick_strain(self, cloud):
+        """Prefer strains that have been reproducing."""
+        strains = getattr(cloud, "strains", None) or [make_founder_strain()]
+        weights = [max(0.2, 1.0 + strain.success) for strain in strains]
+        return random.choices(strains, weights=weights, k=1)[0]
+
+    def _spawn_near_cloud(self, cloud, strain=None):
         """Spawn food within a nutrient cloud's radius."""
-        angle = random.uniform(0, 2 * math.pi)
-        dist = random.uniform(0, cloud.radius * 0.85)
-        x = int(cloud.position[0] + math.cos(angle) * dist)
-        y = int(cloud.position[1] + math.sin(angle) * dist)
-        x = max(5, min(x, self.world_width - 5))
-        y = max(5, min(y, self.world_height - 5))
-        return Food(x, y)
+        chosen = strain if strain is not None else self._pick_strain(cloud)
+        return self._pellet(cloud, chosen)
 
     def active_food_count(self):
         """Count food pellets that have not been consumed."""
@@ -122,6 +149,10 @@ class FoodEcology:
         """Drift clouds and attempt food regrowth from nutrient fields."""
         for cloud in self.clouds:
             cloud.tick()
+        for food in self.food_items:
+            # Symbiotic pellets sit out a short regrow after a graze.
+            if getattr(food, "regrow_in", 0) > 0:
+                food.regrow_in -= 1
         ratio = self.scarcity_ratio()
         spawn_boost = 1.0
         if ratio < self.scarcity_threshold:
@@ -135,6 +166,34 @@ class FoodEcology:
                 self.food_items.append(self._spawn_near_cloud(cloud))
                 if self.active_food_count() >= cap:
                     break
+
+    def note_plant_event(self, food, amount):
+        """A bite paid this strain. Enough success drops a mutated seed."""
+        strain = getattr(food, "strain", None)
+        cloud = getattr(food, "cloud", None)
+        if strain is None:
+            return
+        if not strain.add_success(amount):
+            return
+        child = strain.mutate()
+        if cloud is not None:
+            self._adopt_strain(cloud, child)
+            self.food_items.append(self._pellet(cloud, child))
+        else:
+            self.food_items.append(self._pellet(None, child))
+
+    def _adopt_strain(self, cloud, child):
+        """Keep up to three strains in a cloud, dropping the least successful."""
+        strains = getattr(cloud, "strains", None)
+        if strains is None:
+            cloud.strains = [child]
+            return
+        if len(strains) < 3:
+            strains.append(child)
+            return
+        worst = min(strains, key=lambda item: item.success)
+        strains.remove(worst)
+        strains.append(child)
 
     def prune_consumed(self):
         """Drop consumed food entries to keep the list bounded."""
