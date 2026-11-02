@@ -1,4 +1,4 @@
-"""GPU living-world renderer. Food and bodies are instanced; UI stays pygame."""
+"""GPU living-world renderer. Pellets are instanced; bodies use the pygame organs."""
 
 import struct
 
@@ -72,7 +72,7 @@ void main() {
 
 
 class LivingWorldGLRenderer(LivingWorldRenderer):
-    """Living-world view that draws pellets and bodies as GPU instances."""
+    """Living-world view with instanced pellets and the same organ bodies as pygame."""
 
     def _create_screen(self, total_width):
         """Open an OpenGL window. The GPU context is created after this."""
@@ -162,7 +162,7 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
         self._blit_surface("world", overlay, 0, 0)
 
     def _collect_instances(self, organisms, food_items):
-        """Pack on-screen pellets, eggs, and bodies into one instance list."""
+        """Pack on-screen pellets and eggs. Bodies are drawn with their organs."""
         instances = []
         for food in food_items:
             if food.position is None:
@@ -174,14 +174,6 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
             if getattr(egg, "position", None) is None:
                 continue
             self._append_circle(instances, egg.position, 4.5, (230, 210, 160))
-        selected = self.selected_organism
-        for organism in organisms:
-            if organism is selected or organism.position is None or organism.energy <= 0:
-                continue
-            color = self._organism_color(organism)
-            self._append_circle(
-                instances, organism.position, float(organism.get_radius()), color
-            )
         return instances
 
     def _append_circle(self, instances, position, radius, color):
@@ -221,12 +213,14 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
         self._circle_vao.render(moderngl.TRIANGLES, instances=len(instances) // 6)
 
     def _draw_ui_overlay(self, organisms, food_items, nutrient_clouds, food_ecology):
-        """HUD, minimap, selection, and the tracked body with its organs."""
+        """Bodies with organs, then HUD, minimap, and the tracked inspection panel."""
         ui = pygame.Surface(
             (self.viewport_width, self.viewport_height), pygame.SRCALPHA
         )
+        # Same body routine as the pygame renderer: color, size, jaw, horn, claw, flagella.
+        for organism in organisms:
+            self._draw_organism(ui, organism)
         if self.selected_organism is not None and self.selected_organism.energy > 0:
-            self._draw_organism(ui, self.selected_organism)
             self._draw_selection(ui, self.selected_organism)
             if self.show_sense_rings:
                 self._draw_sense_rings_world(ui, self.selected_organism)

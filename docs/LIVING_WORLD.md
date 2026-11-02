@@ -10,7 +10,7 @@ Steady-state NEAT (**Approach B**) culls low-fitness organisms only when the pop
 # Visual run (recommended)
 python src/main.py harness=living_world
 
-# GPU instanced food and bodies (falls back to pygame if OpenGL is unavailable)
+# GPU pellets and eggs; bodies keep the same organs as the pygame view
 python src/main.py harness=living_world render_backend=moderngl
 
 # Headless run with step limit
