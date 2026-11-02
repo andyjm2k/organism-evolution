@@ -29,12 +29,27 @@ class TestLivingWorldBackend(unittest.TestCase):
         self.assertTrue(issubclass(renderer_cls, living_world_renderer_for("pygame")))
 
     @unittest.skipUnless(opengl_available(), "OpenGL display/context not available")
-    def test_gpu_frame_draws_a_body(self):
-        """One instanced body must change the framebuffer, not leave it blank."""
+    def test_gpu_frame_draws_organs_past_the_body(self):
+        """A founding herbivore's jaw is visible beyond the cell, as in pygame."""
+        import neat
         import pygame
 
+        from genome_bootstrap import install_founding_motif
         from living_world_gl import LivingWorldGLRenderer
 
+        root = Path(__file__).resolve().parents[1]
+        config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            str(root / "config" / "neat-config.ini"),
+        )
+        neat.Population(config)
+        genome = neat.DefaultGenome(1)
+        genome.configure_new(config.genome_config)
+        genome.fitness = 1.0
+        install_founding_motif(genome, config.genome_config)
         renderer = LivingWorldGLRenderer(
             {
                 "viewport_width": 320,
@@ -53,8 +68,9 @@ class TestLivingWorldBackend(unittest.TestCase):
             organism.species_id = 1
             organism.is_carnivore = False
             organism.body_genes = None
-            organism.genome = None
+            organism.genome = genome
             organism.movement_trail = []
+            # Cell radius 14. The jaw continues past that, to the right.
             organism.get_radius = lambda: 12.0
             food = type("Food", (), {"position": None, "regrow_in": 0, "strain": None})()
 
@@ -70,15 +86,18 @@ class TestLivingWorldBackend(unittest.TestCase):
             renderer.track_selected = False
             renderer.selected_organism = None
             renderer.render([organism], [food], [], Ecology())
-            width, height = renderer.screen.get_size()
-            # GL origin is the bottom. The body sits near the top-left of the viewport.
+            _width, height = renderer.screen.get_size()
+            # Outside the cell disk and on the jaw. GL y grows upward.
             sample = renderer.ctx.screen.read(
-                viewport=(30, height - 50, 24, 24),
+                viewport=(54, height - 48, 12, 16),
                 components=3,
             )
             background = (18, 22, 28)
             self.assertTrue(
-                any(abs(sample[index] - background[index % 3]) > 12 for index in range(len(sample)))
+                any(
+                    abs(sample[index] - background[index % 3]) > 20
+                    for index in range(len(sample))
+                )
             )
         finally:
             renderer.cleanup_resources()
