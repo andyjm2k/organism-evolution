@@ -23,7 +23,9 @@ uniform vec2 u_camera;
 out vec3 v_color;
 out vec2 v_local;
 void main() {
-    vec2 screen = in_center - u_camera;
+    // Radius has to be read here. Otherwise the linker drops the attribute
+    // and the instanced buffer cannot be attached.
+    vec2 screen = (in_center - u_camera) + in_corner * in_radius;
     vec2 ndc = (screen / u_screen_size) * 2.0 - 1.0;
     ndc.y = -ndc.y;
     gl_Position = vec4(ndc, 0.0, 1.0);
