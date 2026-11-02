@@ -12,6 +12,9 @@
     "selection_interval_steps": 4000,
     "immigration_rate": 0.03,
     "cull_fraction": 0.1,
+    "target_species_count": 6,
+    "min_species_count": 4,
+    "max_species_count": 9,
 
     "num_food_items": 200,
     "food_target_density": 200,

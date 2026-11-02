@@ -209,16 +209,92 @@ class TestLivingSpeciation(unittest.TestCase):
         child_sid = assign_species(population, neat_config, child)
         self.assertEqual(child_sid, parent_sid)
 
-    def test_added_node_founds_a_species(self):
-        """A new hidden node is far enough to leave the founding species."""
+    def test_added_node_stays_with_founders(self):
+        """One new hidden node is not far enough to leave the founding species."""
         neat_config, population, genome = self._founding_population()
         parent_sid = population.species.get_species_id(genome.key)
         child = neat_config.genome_type(888002)
         child.fitness = 1.0
         child.configure_crossover(genome, genome, neat_config.genome_config)
         child.mutate_add_node(neat_config.genome_config)
+        distance = child.distance(genome, neat_config.genome_config)
+        # The ini threshold has to sit above this mutation or every birth speciates.
+        self.assertLess(
+            distance, neat_config.species_set_config.compatibility_threshold
+        )
         child_sid = assign_species(population, neat_config, child)
-        self.assertNotEqual(child_sid, parent_sid)
+        self.assertEqual(child_sid, parent_sid)
+
+    def test_offspring_follow_living_kin_not_a_dead_founder(self):
+        """A child near a drifted survivor joins that species, not a new one."""
+        neat_config, population, founder = self._founding_population()
+        parent_sid = population.species.get_species_id(founder.key)
+        drifted = neat_config.genome_type(888010)
+        drifted.fitness = 1.0
+        drifted.configure_crossover(founder, founder, neat_config.genome_config)
+        # A large weight shift is far past the threshold from the founder.
+        for connection in drifted.connections.values():
+            connection.weight += 20.0
+        species = population.species.species[parent_sid]
+        species.members[drifted.key] = drifted
+        population.species.genome_to_species[drifted.key] = parent_sid
+        child = neat_config.genome_type(888011)
+        child.fitness = 1.0
+        child.configure_crossover(drifted, drifted, neat_config.genome_config)
+        self.assertGreaterEqual(
+            child.distance(founder, neat_config.genome_config),
+            neat_config.species_set_config.compatibility_threshold,
+        )
+        # Only the drifted genome is alive, so the founder must not be the anchor.
+        child_sid = assign_species(
+            population, neat_config, child, living_ids={drifted.key}
+        )
+        self.assertEqual(child_sid, parent_sid)
+
+    def test_refresh_caps_divergent_population_at_single_digits(self):
+        """Well-separated lineages are reclustered into at most nine species."""
+        neat_config, population, founder = self._founding_population()
+        genomes = {founder.key: founder}
+        next_id = 890000
+        # Sixteen clumps, each a fixed weight shift apart, four copies each.
+        # At the ini threshold every clump is its own species.
+        for group in range(16):
+            for _copy in range(4):
+                genome = neat_config.genome_type(next_id)
+                next_id += 1
+                genome.fitness = 1.0
+                genome.configure_crossover(
+                    founder, founder, neat_config.genome_config
+                )
+                shift = group * 7.0
+                for connection in genome.connections.values():
+                    connection.weight += shift
+                genomes[genome.key] = genome
+        organisms = []
+        for genome in genomes.values():
+            organism = type("Org", (), {})()
+            organism.genome = genome
+            organism.genome_id = genome.key
+            organism.energy = 10
+            organism.species_id = None
+            organisms.append(organism)
+        count = refresh_living_species(
+            population,
+            neat_config,
+            organisms,
+            {"target_species_count": 6, "min_species_count": 4, "max_species_count": 9},
+        )
+        sizes = []
+        seen = {}
+        for organism in organisms:
+            seen[organism.species_id] = seen.get(organism.species_id, 0) + 1
+        sizes = list(seen.values())
+        self.assertGreaterEqual(count, 4)
+        self.assertLessEqual(count, 9)
+        self.assertGreaterEqual(max(sizes), 8)
+        self.assertGreater(
+            population.species.species_set_config.compatibility_threshold, 3.0
+        )
 
     def test_refresh_writes_species_ids_onto_organisms(self):
         """Selection re-speciation updates the ids organisms use for mating."""
@@ -242,6 +318,10 @@ class TestLivingSpeciation(unittest.TestCase):
         self.assertGreaterEqual(count, 1)
         self.assertEqual(parent.species_id, child.species_id)
         self.assertIsNotNone(parent.species_id)
+        # Near-identical genomes must not push the threshold under the ini floor.
+        self.assertGreaterEqual(
+            population.species.species_set_config.compatibility_threshold, 3.0
+        )
 
 
 if __name__ == "__main__":
