@@ -106,7 +106,9 @@ class LivingWorldSimulation:
         self.population = None
         self.renderer = None
         if self.sim_config.get("render", True):
-            self.renderer = LivingWorldRenderer(self.sim_config, self.logging_level)
+            self.renderer = build_living_world_renderer(
+                self.sim_config, self.logging_level
+            )
             self.renderer.set_environment_config(self.environment_config)
         self._pending_births = []
         self._birth_count = 0
@@ -338,3 +340,28 @@ class LivingWorldSimulation:
                     break
         log_always(f"Living world ended at step {self.clock.step}")
         Scoreboard.display_final_summary(self.logging_level)
+
+
+def living_world_renderer_for(backend):
+    """Return the living-world renderer class for a backend name."""
+    chosen = (backend or "pygame").strip().lower()
+    if chosen == "moderngl":
+        from living_world_gl import LivingWorldGLRenderer
+
+        return LivingWorldGLRenderer
+    return LivingWorldRenderer
+
+
+def build_living_world_renderer(sim_config, logging_level):
+    """Open the requested renderer, falling back to pygame if the GPU path fails."""
+    backend = sim_config.get("render_backend", "pygame")
+    try:
+        renderer_cls = living_world_renderer_for(backend)
+        return renderer_cls(sim_config, logging_level)
+    except Exception as exc:
+        if (backend or "pygame").strip().lower() != "moderngl":
+            raise
+        log_always(
+            f"Living world GPU renderer unavailable ({exc}); falling back to pygame"
+        )
+        return LivingWorldRenderer(sim_config, logging_level)

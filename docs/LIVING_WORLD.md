@@ -10,6 +10,9 @@ Steady-state NEAT (**Approach B**) culls low-fitness organisms only when the pop
 # Visual run (recommended)
 python src/main.py harness=living_world
 
+# GPU instanced food and bodies (falls back to pygame if OpenGL is unavailable)
+python src/main.py harness=living_world render_backend=moderngl
+
 # Headless run with step limit
 python src/main.py harness=living_world render=false max_world_steps=10000
 ```
@@ -28,6 +31,7 @@ Configuration defaults live in `config/living-world-config.json`.
 | `src/world_clock.py` | Monotonic step counter and epoch grouping |
 | `src/camera.py` | Viewport pan and world/screen coordinate transforms |
 | `src/living_world_renderer.py` | Large-world pygame UI (minimap, tracking, genome panel) |
+| `src/living_world_gl.py` | GPU living-world view: instanced pellets and bodies, same camera and UI |
 | `src/genome_viz.py` | NEAT genome graph for the inspection panel |
 
 ## Episodic vs living world
