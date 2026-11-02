@@ -133,6 +133,28 @@ class TestPlantStrain(unittest.TestCase):
         self.assertGreater(len(ecology.food_items), before)
         self.assertGreaterEqual(len(cloud.strains), 2)
 
+    def test_seed_does_not_raise_food_above_the_cap(self):
+        """A successful strain still mutates when the ground is already full."""
+        ecology = FoodEcology(
+            {
+                "environment_width": 200,
+                "environment_height": 200,
+                "food_target_density": 10,
+                "num_food_items": 0,
+                "nutrient_cloud_count": 1,
+            }
+        )
+        cloud = ecology.clouds[0]
+        strain = cloud.strains[0]
+        cap = ecology.food_cap()
+        while ecology.active_food_count() < cap:
+            ecology.food_items.append(ecology._spawn_near_cloud(cloud, strain))
+        strain.success = 7.0
+        strains_before = len(cloud.strains)
+        ecology.note_plant_event(ecology.food_items[0], 1)
+        self.assertEqual(ecology.active_food_count(), cap)
+        self.assertGreater(len(cloud.strains), strains_before)
+
 
 if __name__ == "__main__":
     unittest.main()

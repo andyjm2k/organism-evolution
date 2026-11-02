@@ -135,9 +135,18 @@ class FoodEcology:
         chosen = strain if strain is not None else self._pick_strain(cloud)
         return self._pellet(cloud, chosen)
 
+    def food_cap(self):
+        """Hard ceiling shared by cloud regrowth and plant seeds."""
+        # 1.6 times the target is the same headroom the ecology used before strains.
+        return max(1, int(self.target_density * 1.6))
+
     def active_food_count(self):
         """Count food pellets that have not been consumed."""
         return sum(1 for food in self.food_items if food.position is not None)
+
+    def has_food_room(self):
+        """True when another live pellet would still fit under the cap."""
+        return self.active_food_count() < self.food_cap()
 
     def scarcity_ratio(self):
         """Return current food count divided by target density."""
@@ -153,19 +162,20 @@ class FoodEcology:
             # Symbiotic pellets sit out a short regrow after a graze.
             if getattr(food, "regrow_in", 0) > 0:
                 food.regrow_in -= 1
+        # Eaten pellets must leave the list every tick. Seeds used to pile
+        # them up faster than the occasional prune could drop them.
+        self.prune_consumed()
+        self._trim_to_cap()
         ratio = self.scarcity_ratio()
         spawn_boost = 1.0
         if ratio < self.scarcity_threshold:
             spawn_boost = self.scarcity_multiplier
-        cap = int(self.target_density * 1.6)
-        if self.active_food_count() >= cap:
+        if not self.has_food_room():
             return
         for cloud in self.clouds:
             rate = self.base_spawn_rate * cloud.intensity * spawn_boost
-            if random.random() < rate:
+            if random.random() < rate and self.has_food_room():
                 self.food_items.append(self._spawn_near_cloud(cloud))
-                if self.active_food_count() >= cap:
-                    break
 
     def note_plant_event(self, food, amount):
         """A bite paid this strain. Enough success drops a mutated seed."""
@@ -176,8 +186,13 @@ class FoodEcology:
         if not strain.add_success(amount):
             return
         child = strain.mutate()
+        # The strain list can still change when the ground is full. A new
+        # pellet is only placed while the world is under the food cap.
         if cloud is not None:
             self._adopt_strain(cloud, child)
+        if not self.has_food_room():
+            return
+        if cloud is not None:
             self.food_items.append(self._pellet(cloud, child))
         else:
             self.food_items.append(self._pellet(None, child))
@@ -195,9 +210,24 @@ class FoodEcology:
         strains.remove(worst)
         strains.append(child)
 
+    def _trim_to_cap(self):
+        """Drop surplus live pellets so a seed burst cannot outrun the cap."""
+        cap = self.food_cap()
+        kept = 0
+        overflow = False
+        for food in self.food_items:
+            if food.position is None:
+                continue
+            kept += 1
+            if kept > cap:
+                food.position = None
+                overflow = True
+        if overflow:
+            self.prune_consumed()
+
     def prune_consumed(self):
-        """Drop consumed food entries to keep the list bounded."""
-        if len(self.food_items) > self.target_density * 3:
+        """Drop consumed food entries so the list stays the size of the live set."""
+        if any(food.position is None for food in self.food_items):
             self.food_items = [
                 food for food in self.food_items if food.position is not None
             ]
