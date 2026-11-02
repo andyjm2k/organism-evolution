@@ -115,7 +115,7 @@ Color, diet, and size are body genes, separate from the network, in the same spl
 
 Living-world births are eggs. Two adults fertilize one, a parent fills it from their energy, and it hatches small. Maturity climbs toward the adult size while energy is spare, and only adults breed. Carnivores bite: health is life, energy is fuel. A killing bite is what removes the prey.
 
-Plant pellets belong to strains on the nutrient clouds. A strain's relation gene drifts slowly. Symbiotic plants regrow when grazed and seed more often. Indifferent plants are an ordinary meal. Predatory plants deal health damage when bitten. Strains start near indifferent so the founding grazers can eat.
+Plant pellets belong to strains on the nutrient clouds. A strain's relation gene drifts slowly. Symbiotic plants regrow when grazed and seed more often. Indifferent plants are an ordinary meal. Predatory plants deal health damage when bitten. Strains start near indifferent so the founding grazers can eat. A new seed is placed only while the live pellet count is under the food cap (1.6 times `food_target_density`). At the cap the strain can still mutate, but it does not add another pellet. Eaten pellets are dropped from the list every tick.
 
 ### Genesis bootstrap
 
