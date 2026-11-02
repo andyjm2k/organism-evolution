@@ -364,4 +364,8 @@ def build_living_world_renderer(sim_config, logging_level):
         log_always(
             f"Living world GPU renderer unavailable ({exc}); falling back to pygame"
         )
+        # A failed GPU init may already have opened an OpenGL window.
+        # Software blits do not show up on that window, so close it first.
+        if pygame.display.get_init():
+            pygame.display.quit()
         return LivingWorldRenderer(sim_config, logging_level)
