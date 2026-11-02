@@ -291,8 +291,11 @@ class LivingWorldSimulation:
                     f"births {self._birth_count}"
                 )
             if self.renderer and self.clock.step % self.render_stride == 0:
+                # An epoch is a clock bucket for the log. It is not a new
+                # generation: the same organisms stay on screen, and
+                # set_generation would wipe their color cache as if the
+                # population had been replaced.
                 self.renderer.set_world_step(self.clock.step)
-                self.renderer.set_generation(self.clock.epoch)
                 if not self.renderer.render(
                     organisms,
                     self.food_ecology.food_items,

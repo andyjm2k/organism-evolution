@@ -349,6 +349,14 @@ def refresh_living_species(population, neat_config, organisms, sim_config=None):
         living[organism.genome_id] = organism.genome
     if not living:
         return 0
+    # The id currently drawn on each body. Re-clustering must put it back
+    # on the same lineage, or every selection pass recolors the survivors.
+    previous_ids = {}
+    for organism in organisms:
+        if organism.energy <= 0 or organism.genome is None:
+            continue
+        if organism.species_id is not None:
+            previous_ids[organism.genome_id] = organism.species_id
     # Widen or relax the threshold before clustering so the result can breed.
     tune_compatibility_threshold(population, neat_config, living, sim_config)
     # Drop stale species first. More old species than living genomes makes
@@ -356,8 +364,65 @@ def refresh_living_species(population, neat_config, organisms, sim_config=None):
     population.species.species = {}
     population.species.genome_to_species = {}
     population.species.speciate(neat_config, living, population.generation)
+    # Speciate mints new ids. Map each cluster back onto the id its members
+    # already had so an epoch does not look like a new generation.
+    _restore_species_ids(population, previous_ids)
     for organism in organisms:
         sid = population.species.genome_to_species.get(organism.genome_id)
         if sid is not None:
             organism.species_id = sid
     return len(population.species.species)
+
+
+def _restore_species_ids(population, previous_ids):
+    """Keep each surviving lineage on the species id it already displays."""
+    if not previous_ids or not population.species.species:
+        return
+    # Vote: the id most members already have is the one the cluster should keep.
+    ranked = []
+    for sid, species in population.species.species.items():
+        votes = {}
+        for genome_id in species.members:
+            old_id = previous_ids.get(genome_id)
+            if old_id is None:
+                continue
+            votes[old_id] = votes.get(old_id, 0) + 1
+        best_id = None
+        best_votes = 0
+        for old_id, count in votes.items():
+            # Ties break toward the lower id so the choice is stable.
+            better = count > best_votes
+            tied = count == best_votes and (best_id is None or old_id < best_id)
+            if better or tied:
+                best_id = old_id
+                best_votes = count
+        ranked.append((best_votes, sid, best_id))
+    # Largest claim wins a shared historical id. The other cluster keeps
+    # the fresh id speciate just issued, which has never been displayed.
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    used = set()
+    assignment = {}
+    for _votes, sid, best_id in ranked:
+        if best_id is not None and best_id not in used:
+            chosen = best_id
+        elif sid not in used:
+            chosen = sid
+        else:
+            chosen = next(population.species.indexer)
+            while chosen in used:
+                chosen = next(population.species.indexer)
+        used.add(chosen)
+        assignment[sid] = chosen
+    if all(new_id == old_id for old_id, new_id in assignment.items()):
+        return
+    rebuilt = {}
+    rebuilt_map = {}
+    for sid, species in population.species.species.items():
+        stable = assignment.get(sid, sid)
+        # Species.key and the dict key are the id organisms and NEAT both read.
+        species.key = stable
+        rebuilt[stable] = species
+        for genome_id in species.members:
+            rebuilt_map[genome_id] = stable
+    population.species.species = rebuilt
+    population.species.genome_to_species = rebuilt_map
