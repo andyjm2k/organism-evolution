@@ -4,6 +4,7 @@ import random
 
 from neat.species import Species
 
+from body_genes import inherit_body_genes
 from genome_bootstrap import bootstrap_immigrant_genome
 from logging_util import log_always
 
@@ -137,6 +138,8 @@ def _create_immigrant_genome(population, neat_config, top_ids, sim_config=None):
         genome.mutate(neat_config.genome_config)
         for connection in genome.connections.values():
             connection.enabled = True
+        # Body follows the first parent. The brain crossover already happened.
+        inherit_body_genes(genome, parent_a, parent_b)
         genome.key = genome_id
         # Species ids are not a diet. Copy the parent role, and default to the
         # herbivore founders so a reseed can eat the plants in the world.

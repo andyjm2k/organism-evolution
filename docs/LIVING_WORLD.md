@@ -109,7 +109,9 @@ See `config/living-world-config.json` for defaults. Important keys:
 
 ### Feeding and breeding
 
-Movement and the decision to breed come from the four network outputs. Founders share one starting genome: sensed food and prey directions drive velocity, a mate is sensed but does not steer the body, the breed output begins willing, and the rest output begins off. Births inherit that wiring and mutate it. Eating, energy, and the breeding cooldown stay physical limits. A birth also requires a prior meal, so starting energy is not spent on children who have never eaten. Offspring keep the parent's diet, and founders are herbivores so the lineage can eat the plants in the world.
+Movement and the decision to breed come from the four network outputs. Founders share one starting genome: sensed food and prey directions drive velocity, a mate is sensed but does not steer the body, the breed output begins willing, and the rest output begins off. Births inherit that wiring and mutate it. Eating, energy, and the breeding cooldown stay physical limits. A birth also requires a prior meal, so starting energy is not spent on children who have never eaten.
+
+Color, diet, and size are body genes, separate from the network, in the same split The Bibites use. A child copies the fitter parent's genes and nudges them, so a lineage stays a recognizable color and diet while the brain changes. Founders start as green grazers. The diet gene, not the species id, decides who hunts. Species id is only who they can breed with.
 
 ### Genesis bootstrap
 

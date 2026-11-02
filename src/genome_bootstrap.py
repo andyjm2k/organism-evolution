@@ -2,6 +2,7 @@
 
 import random
 
+from body_genes import make_founder_genes
 from logging_util import log_always
 
 # Sensor channels (network_inputs.py) as NEAT keys: key = -(index) - 1.
@@ -164,6 +165,8 @@ def bootstrap_population(population, neat_config, sim_config=None):
         # Founders eat the plant food that actually exists. Species ids are an
         # accident of speciation and must not turn the whole cohort into hunters.
         genome.diet_key = getattr(template, "diet_key", 1)
+        # Same starting body as the other founders, with a little pigment noise.
+        genome.body_genes = make_founder_genes()
         bootstrapped[genome_id] = genome
 
     population.population = bootstrapped
@@ -198,4 +201,6 @@ def bootstrap_immigrant_genome(neat_config, sim_config=None):
     install_founding_motif(genome, genome_config)
     _bias_foraging_weights(genome, genome_config, foraging_bias)
     _ensure_connections_enabled(genome)
+    # Immigrants hatch as the same grazer stock, not a random hunter color.
+    genome.body_genes = make_founder_genes()
     return genome

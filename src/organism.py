@@ -5,6 +5,7 @@ import random
 
 import neat
 
+from body_genes import apply_body_genes, inherit_body_genes
 from distance import colliding, distance, within_radius
 from fitness import calculate_fitness
 from logging_util import log_detailed
@@ -72,6 +73,8 @@ class Organism:
         # Diet keyed by genome id when provided so gen-0 gets mixed roles.
         self._diet_key = diet_key if diet_key is not None else species_id
         self.is_carnivore = self._diet_from_species(self._diet_key)
+        # Body genes, when the genome has them, replace the species-id diet.
+        apply_body_genes(self)
         # Derive speed/size/energy from genome structure + config economy.
         self._calculate_attributes()
         # Start from configured starting energy (not always max capacity).
@@ -116,6 +119,13 @@ class Organism:
         size_factor = 0.25 + (self.connection_count / 10.0)
         self.speed = base_speed * min(4.0, max(0.25, speed_factor))
         self.size = base_size * min(4.0, max(0.25, size_factor))
+        # Heritable size gene. 1.0 leaves the network-derived body unchanged.
+        genes = getattr(self, "body_genes", None)
+        if genes is not None:
+            self.size *= genes.size
+            self.base_radius_scale = genes.size
+        else:
+            self.base_radius_scale = 1.0
         # Capacity scales with size; starting energy comes from config when set.
         energy_mult = float(self.environment_config.get("energy_multiplier", 3.0))
         self.max_energy = base_energy * self.size * energy_mult
@@ -143,8 +153,9 @@ class Organism:
 
     def _calculate_visual_properties(self):
         """Map network complexity onto drawable spike geometry."""
-        # Body radius grows slowly with node count.
-        self.base_radius = 4 + min(8, self.node_count / 10.0)
+        # Body radius grows slowly with node count, then with the size gene.
+        scale = getattr(self, "base_radius_scale", 1.0)
+        self.base_radius = (4 + min(8, self.node_count / 10.0)) * scale
         # Spike count tracks hidden complexity.
         self.num_spikes = min(16, max(3, 3 + self.hidden_count))
         # Spike length tracks connection density.
@@ -399,6 +410,9 @@ class Organism:
         child_genome = type(self.genome)(0)
         child_genome.configure_crossover(parent1, parent2, self.config.genome_config)
         child_genome.mutate(self.config.genome_config)
+        # Body genes come from the fitter parent and then mutate. The brain
+        # already mutated above; color and diet are a separate inheritance.
+        inherit_body_genes(child_genome, parent1, parent2)
         child = Organism(
             child_genome,
             self.config,
