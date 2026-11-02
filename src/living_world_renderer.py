@@ -24,12 +24,8 @@ class LivingWorldRenderer(RendererCommon):
         self.world_height = int(sim_config["environment_height"])
         self.minimap_size = int(sim_config.get("minimap_size", 160))
         total_width = self.viewport_width + self.scoreboard_width
-        if not pygame.display.get_init():
-            self.screen = pygame.display.set_mode((total_width, self.viewport_height))
-        else:
-            self.screen = pygame.display.get_surface()
-            if self.screen is None:
-                self.screen = pygame.display.set_mode((total_width, self.viewport_height))
+        # Subclasses open an OpenGL window from this hook before any drawing.
+        self._create_screen(total_width)
         pygame.display.set_caption("Living World Evolution")
         self.scoreboard_rect = pygame.Rect(
             self.viewport_width, 0, self.scoreboard_width, self.viewport_height
@@ -52,6 +48,16 @@ class LivingWorldRenderer(RendererCommon):
             f"Living world renderer: world {self.world_width}x{self.world_height}, "
             f"viewport {self.viewport_width}x{self.viewport_height}",
         )
+
+    def _create_screen(self, total_width):
+        """Open the software pygame window."""
+        size = (total_width, self.viewport_height)
+        if not pygame.display.get_init():
+            self.screen = pygame.display.set_mode(size)
+            return
+        self.screen = pygame.display.get_surface()
+        if self.screen is None:
+            self.screen = pygame.display.set_mode(size)
 
     def set_world_step(self, step):
         """Update HUD world step counter."""

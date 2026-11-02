@@ -39,6 +39,11 @@ Two simulation harnesses are available:
    python src/main.py harness=living_world
    ```
 
+   GPU living world (OpenGL display and `requirements-gpu.txt`):
+   ```bash
+   python src/main.py harness=living_world render_backend=moderngl
+   ```
+
 4. Run episodic mode with visual rendering:
    ```bash
    python src/main.py render=true
@@ -57,7 +62,7 @@ CLI flags use `key=value` syntax and override the active config JSON (`simulatio
 |------|--------|-------------|
 | `harness=` | `episodic` / `living_world` | Select simulation harness |
 | `render=` | `true` / `false` | Enable or disable rendering |
-| `render_backend=` | `pygame` / `moderngl` | Software pygame or GPU ModernGL backend (episodic only) |
+| `render_backend=` | `pygame` / `moderngl` | Software pygame or GPU ModernGL backend |
 | `logging=` | `normal` / `detailed` | Console log verbosity during evaluation |
 | `dashboard=` | `minimal` / `normal` / `detailed` | Terminal scoreboard detail level |
 
