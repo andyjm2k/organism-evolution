@@ -112,11 +112,18 @@ class LivingWorldSimulation:
         genome_id = self.registry.add_birth(
             child_genome, child, self._batch_engine
         )
-        # Species follows genetic distance. A child that adds a node can leave
-        # its parents' species instead of keeping their id forever.
+        # Match the child to living kin. An ordinary mutation stays in the
+        # parents' species; only a genome past the compatibility threshold
+        # founds one, so a species can grow large enough to replace another.
         if self.population is not None:
+            living_ids = {
+                org.genome_id
+                for org in self.registry.alive_organisms()
+                if getattr(org, "genome_id", None) is not None
+                and org.genome_id != child_genome.key
+            }
             child.species_id = assign_species(
-                self.population, self.neat_config, child_genome
+                self.population, self.neat_config, child_genome, living_ids
             )
         child.simulation = self
         self.fitness_tracker.init_genome(genome_id)

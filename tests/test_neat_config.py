@@ -48,8 +48,8 @@ class TestNeatConfig(unittest.TestCase):
         )
         self.assertEqual(len(population.population), config.pop_size)
 
-    def test_compatibility_threshold_admits_structural_species(self):
-        """Threshold is low enough that one new node can leave its parents' species."""
+    def test_compatibility_threshold_keeps_ordinary_mutations_together(self):
+        """Threshold stays above one new node so a species can grow past a singleton."""
         root = Path(__file__).resolve().parents[1]
         config = neat.Config(
             neat.DefaultGenome,
@@ -58,7 +58,8 @@ class TestNeatConfig(unittest.TestCase):
             neat.DefaultStagnation,
             str(root / "config" / "neat-config.ini"),
         )
-        self.assertEqual(config.species_set_config.compatibility_threshold, 1.0)
+        # 3.0 is wider than one added node (~1.2–1.6) on the founding network.
+        self.assertGreaterEqual(config.species_set_config.compatibility_threshold, 3.0)
         self.assertGreaterEqual(
             config.genome_config.compatibility_disjoint_coefficient, 2.0
         )

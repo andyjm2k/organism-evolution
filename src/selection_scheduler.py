@@ -41,7 +41,7 @@ class SelectionScheduler:
                 sim_config,
                 5,
             )
-            self._refresh_species(population, registry, neat_config)
+            self._refresh_species(population, registry, neat_config, sim_config)
             return
         # Sync rolling fitness onto NEAT genomes before any selection work.
         fitness_tracker.apply_to_genomes(population.population)
@@ -67,7 +67,7 @@ class SelectionScheduler:
                 inject,
             )
         # Re-cluster whoever is still alive so species ids follow the genomes.
-        self._refresh_species(population, registry, neat_config)
+        self._refresh_species(population, registry, neat_config, sim_config)
 
     def _inject_immigrants(
         self,
@@ -92,9 +92,14 @@ class SelectionScheduler:
                 break
             genome_id = genome.key
             population.population[genome_id] = genome
-            # Place the immigrant against living species instead of re-clustering
-            # only the original NEAT pool, which would drop birth genomes.
-            assign_species(population, neat_config, genome)
+            # Place the immigrant against whoever is alive, not a stale
+            # representative from a genome that has already died.
+            living_ids = {
+                org.genome_id
+                for org in registry.alive_organisms()
+                if getattr(org, "genome_id", None) is not None
+            }
+            assign_species(population, neat_config, genome, living_ids)
             fitness_tracker.init_genome(genome_id)
             organism = registry.spawn_immigrant(genome, population, batch_engine)
             if organism is not None:
@@ -102,12 +107,21 @@ class SelectionScheduler:
         if created:
             log_always(f"Selection: injected {created} immigrant organisms")
 
-    def _refresh_species(self, population, registry, neat_config):
+    def _refresh_species(self, population, registry, neat_config, sim_config=None):
         """Re-speciate living organisms and log how many species that yields."""
+        # Capture the threshold before retuning so the log can show a move.
+        previous = float(population.species.species_set_config.compatibility_threshold)
         species_count = refresh_living_species(
-            population, neat_config, registry.alive_organisms()
+            population, neat_config, registry.alive_organisms(), sim_config
         )
-        log_always(f"Selection: {species_count} living species")
+        updated = float(population.species.species_set_config.compatibility_threshold)
+        if abs(updated - previous) >= 0.05:
+            log_always(
+                f"Selection: {species_count} living species "
+                f"(compatibility {previous:.2f} -> {updated:.2f})"
+            )
+        else:
+            log_always(f"Selection: {species_count} living species")
 
 
 def _create_immigrant_genome(population, neat_config, top_ids, sim_config=None):
@@ -136,18 +150,42 @@ def _create_immigrant_genome(population, neat_config, top_ids, sim_config=None):
     return genome
 
 
-def assign_species(population, neat_config, genome):
-    """Put a genome in the nearest species, or start a species when it is too far."""
+# Selection aims for a handful of species, and refuses to exceed one digit.
+# Below the minimum it relaxes the threshold so distinct lineages can compete.
+DEFAULT_TARGET_SPECIES = 6
+DEFAULT_MIN_SPECIES = 4
+DEFAULT_MAX_SPECIES = 9
+# How far above the ini threshold a search will look. Fully diverged
+# genomes at these distance weights top out inside this span.
+_THRESHOLD_SEARCH_SPAN = 8.0
+
+
+def assign_species(population, neat_config, genome, living_ids=None):
+    """Put a genome in the nearest living species, or start one when it is too far."""
+    # Drop dead members first so an ancient representative cannot isolate kin.
+    if living_ids is not None:
+        _drop_absent_members(population, living_ids)
     # Threshold is the neat-config compatibility distance, not a fixed cutoff.
     threshold = population.species.species_set_config.compatibility_threshold
     genome_config = neat_config.genome_config
     best_sid = None
     best_distance = None
     for sid, species in population.species.species.items():
+        # Distance to the closest living member. A child of a drifted
+        # lineage stays with that lineage even if the original founder is
+        # still the representative and is now far away.
+        for member in species.members.values():
+            if member is None:
+                continue
+            distance = genome.distance(member, genome_config)
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                best_sid = sid
+        if species.members:
+            continue
         representative = species.representative
         if representative is None:
             continue
-        # Distance uses the same formula as NEAT speciation.
         distance = genome.distance(representative, genome_config)
         if best_distance is None or distance < best_distance:
             best_distance = distance
@@ -164,10 +202,143 @@ def assign_species(population, neat_config, genome):
     species = population.species.species[best_sid]
     species.members[genome.key] = genome
     population.species.genome_to_species[genome.key] = best_sid
+    # If the representative died, follow the living member we matched.
+    representative = species.representative
+    rep_key = getattr(representative, "key", None)
+    if representative is None or rep_key not in species.members:
+        species.representative = genome
     return best_sid
 
 
-def refresh_living_species(population, neat_config, organisms):
+def _drop_absent_members(population, living_ids):
+    """Forget genomes that are no longer alive so distance uses the living cloud."""
+    empty = []
+    for sid, species in population.species.species.items():
+        # Member ids absent from the living set are dead or culled.
+        absent = [
+            member_id
+            for member_id in species.members
+            if member_id not in living_ids
+        ]
+        for member_id in absent:
+            species.members.pop(member_id, None)
+            if population.species.genome_to_species.get(member_id) == sid:
+                population.species.genome_to_species.pop(member_id, None)
+        representative = species.representative
+        rep_key = getattr(representative, "key", None)
+        if species.members and (representative is None or rep_key not in species.members):
+            # The representative has to be a genome that is still a member.
+            species.representative = next(iter(species.members.values()))
+        if not species.members:
+            empty.append(sid)
+    for sid in empty:
+        # An empty species must not keep matching new births.
+        population.species.species.pop(sid, None)
+
+
+def _species_settings(sim_config, population_size):
+    """Return the min, target, and max species counts for this population."""
+    sim_config = sim_config or {}
+    # Configured band. Callers can tighten it without editing code.
+    target = int(sim_config.get("target_species_count", DEFAULT_TARGET_SPECIES))
+    minimum = int(sim_config.get("min_species_count", DEFAULT_MIN_SPECIES))
+    ceiling = int(sim_config.get("max_species_count", DEFAULT_MAX_SPECIES))
+    # A species needs several members before two of them can meet and breed.
+    # Never ask a small population for more species than that packing allows.
+    packed = max(1, int(population_size) // 4)
+    ceiling = max(1, min(max(1, ceiling), packed))
+    minimum = max(1, min(minimum, ceiling))
+    target = max(minimum, min(max(1, target), ceiling))
+    return minimum, target, ceiling
+
+
+def _baseline_threshold(population):
+    """Remember the ini threshold so selection can raise it and later relax."""
+    stored = getattr(population.species, "_baseline_compatibility", None)
+    if stored is None:
+        # First retune captures the value loaded from neat-config.ini.
+        stored = float(population.species.species_set_config.compatibility_threshold)
+        population.species._baseline_compatibility = stored
+    return stored
+
+
+def _pair_distances(genomes, genome_config):
+    """Cache genetic distance for every unordered pair of living genomes."""
+    keys = sorted(genomes)
+    distances = {}
+    for index, left in enumerate(keys):
+        for right in keys[index + 1:]:
+            distance = genomes[left].distance(genomes[right], genome_config)
+            distances[(left, right)] = distance
+            distances[(right, left)] = distance
+    return keys, distances
+
+
+def _cluster_count(keys, distances, threshold):
+    """Count species the way NEAT does when no old representatives exist."""
+    representatives = []
+    for genome_id in keys:
+        nearest = None
+        nearest_distance = None
+        for representative_id in representatives:
+            distance = distances[(genome_id, representative_id)]
+            # NEAT joins when distance is strictly inside the threshold.
+            if distance < threshold and (
+                nearest_distance is None or distance < nearest_distance
+            ):
+                nearest = representative_id
+                nearest_distance = distance
+        if nearest is None:
+            representatives.append(genome_id)
+    return len(representatives)
+
+
+def tune_compatibility_threshold(population, neat_config, genomes, sim_config=None):
+    """Keep the living species count inside the single-digit band."""
+    current = float(population.species.species_set_config.compatibility_threshold)
+    if len(genomes) <= 1:
+        return current
+    minimum, target, ceiling = _species_settings(sim_config, len(genomes))
+    # The ini value is the floor. Dropping below it is what produced singletons.
+    baseline = _baseline_threshold(population)
+    current = max(current, baseline)
+    keys, distances = _pair_distances(genomes, neat_config.genome_config)
+    current_count = _cluster_count(keys, distances, current)
+    # Already a handful of breeding groups: leave the threshold alone.
+    if minimum <= current_count <= ceiling:
+        _apply_threshold(population, neat_config, current)
+        return current
+    best_threshold = current
+    best_rank = None
+    # Sample from the floor upward. Include the live threshold so a value
+    # between samples can still win when it is already in use.
+    candidates = [
+        baseline + _THRESHOLD_SEARCH_SPAN * step / 8.0 for step in range(9)
+    ]
+    candidates.append(current)
+    for threshold in sorted({round(value, 4) for value in candidates}):
+        if threshold + 1e-9 < baseline:
+            continue
+        count = _cluster_count(keys, distances, threshold)
+        over = max(0, count - ceiling)
+        gap = abs(count - target)
+        # In-ceiling counts win, then closeness to the target, then the
+        # smallest move from the threshold already in use.
+        rank = (over, gap, abs(threshold - current), threshold)
+        if best_rank is None or rank < best_rank:
+            best_rank = rank
+            best_threshold = threshold
+    _apply_threshold(population, neat_config, best_threshold)
+    return best_threshold
+
+
+def _apply_threshold(population, neat_config, threshold):
+    """Write one compatibility threshold onto the objects NEAT actually reads."""
+    population.species.species_set_config.compatibility_threshold = threshold
+    neat_config.species_set_config.compatibility_threshold = threshold
+
+
+def refresh_living_species(population, neat_config, organisms, sim_config=None):
     """Re-speciate the current living genomes and write species ids back."""
     living = {}
     for organism in organisms:
@@ -178,6 +349,8 @@ def refresh_living_species(population, neat_config, organisms):
         living[organism.genome_id] = organism.genome
     if not living:
         return 0
+    # Widen or relax the threshold before clustering so the result can breed.
+    tune_compatibility_threshold(population, neat_config, living, sim_config)
     # Drop stale species first. More old species than living genomes makes
     # NEAT's speciate step fail when it looks for a new representative.
     population.species.species = {}

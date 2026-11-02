@@ -63,6 +63,8 @@ Every `selection_interval_steps`:
 
 Under the cap, natural deaths and births control headcount — selection never force-culls a below-capacity population. In-world births that would exceed the cap still displace the lowest-fitness organism so the limit is hard.
 
+Births join the species of the nearest living member. The compatibility threshold in `neat-config.ini` starts at 3.0, which is wider than one added node or connection, so offspring stay with their parents and a species can grow. Each selection pass re-clusters the living genomes. If that would form more than `max_species_count` species, the threshold is raised until the count is back inside the single digits, near `target_species_count`. If a previous raise left fewer than `min_species_count` species, the threshold relaxes back toward the ini value, and never below it. Species then have enough members to breed, and a lineage that forages or hunts better can replace the others.
+
 When the population goes extinct, the scheduler automatically reseeds immigrants.
 
 ## Rendering and controls
@@ -98,6 +100,9 @@ See `config/living-world-config.json` for defaults. Important keys:
 | `selection_interval_steps` | 4000 | Steady-state selection cadence |
 | `cull_fraction` | 0.1 | Fraction culled on selection ticks that hit `max_population` |
 | `immigration_rate` | 0.03 | Probability of injecting immigrants when under cap |
+| `target_species_count` | 6 | Species count selection aims for when the living set is outside the band |
+| `min_species_count` | 4 | Below this, selection relaxes the compatibility threshold down toward the ini value |
+| `max_species_count` | 9 | Hard ceiling. More living species than this raises the compatibility threshold |
 | `max_world_steps` | `null` | Optional stop condition (`null` = run until quit) |
 | `minimap_size` | 160 | Minimap pixel width/height |
 | `camera_track_smoothing` | 0.15 | Smooth follow factor for tracked organisms |
