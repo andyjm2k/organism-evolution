@@ -56,19 +56,19 @@ class RendererCommon:
     def get_species_color(self, species_id, is_carnivore):
         """Return a stable color for a species id."""
         if species_id not in self.species_colors:
-            hash_val = hash(species_id)
-            random.seed(hash_val)
+            # Local generator only. Seeding the process RNG here would
+            # reshuffle births and movement every time a species is first drawn.
+            palette = random.Random(hash(species_id))
             if is_carnivore:
-                hue = random.uniform(0, 60) / 360.0
-                saturation = random.uniform(0.7, 1.0)
-                lightness = random.uniform(0.3, 0.7)
+                hue = palette.uniform(0, 60) / 360.0
+                saturation = palette.uniform(0.7, 1.0)
+                lightness = palette.uniform(0.3, 0.7)
             else:
-                hue = random.uniform(30, 120) / 360.0
-                saturation = random.uniform(0.4, 0.8)
-                lightness = random.uniform(0.2, 0.6)
+                hue = palette.uniform(30, 120) / 360.0
+                saturation = palette.uniform(0.4, 0.8)
+                lightness = palette.uniform(0.2, 0.6)
             rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
             self.species_colors[species_id] = tuple(int(x * 255) for x in rgb)
-            random.seed()
         return self.species_colors[species_id]
 
     def species_color_normalized(self, species_id, is_carnivore):
@@ -199,7 +199,11 @@ class RendererCommon:
         pygame.draw.circle(surface, (255, 210, 60), pos, highlight_radius, 2)
 
     def set_generation(self, generation):
-        """Update generation label and periodically clear caches."""
+        """Update the episodic generation label and clear caches on a real rollover.
+
+        The living world does not call this. An epoch there is a clock reading,
+        and the organisms on screen are the same ones as the step before.
+        """
         if generation != self.generation:
             self.cleanup_resources(light=True)
         self.generation = generation

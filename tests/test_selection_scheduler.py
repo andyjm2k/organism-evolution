@@ -323,6 +323,72 @@ class TestLivingSpeciation(unittest.TestCase):
             population.species.species_set_config.compatibility_threshold, 3.0
         )
 
+    def test_refresh_keeps_species_ids_on_the_same_lineage(self):
+        """A second clustering pass must not recolor organisms that stayed put."""
+        neat_config, population, genome = self._founding_population()
+        sibling = neat_config.genome_type(888020)
+        sibling.fitness = 1.0
+        sibling.configure_crossover(genome, genome, neat_config.genome_config)
+        for connection in sibling.connections.values():
+            connection.weight += 0.02
+        parent = type("Org", (), {})()
+        parent.genome = genome
+        parent.genome_id = genome.key
+        parent.energy = 10
+        parent.species_id = population.species.get_species_id(genome.key)
+        child = type("Org", (), {})()
+        child.genome = sibling
+        child.genome_id = sibling.key
+        child.energy = 10
+        child.species_id = parent.species_id
+        organisms = [parent, child]
+        refresh_living_species(population, neat_config, organisms)
+        kept = (parent.species_id, child.species_id)
+        refresh_living_species(population, neat_config, organisms)
+        self.assertEqual((parent.species_id, child.species_id), kept)
+        self.assertEqual(parent.species_id, child.species_id)
+
+    def test_refresh_keeps_separate_species_on_their_own_ids(self):
+        """Two lineages that stay apart keep the colors they already have."""
+        neat_config, population, founder = self._founding_population()
+        founder_id = population.species.get_species_id(founder.key)
+        genomes = {founder.key: founder}
+        next_id = 889000
+        # Four near-copies of the founder, and four shifted far enough to
+        # be their own species at the ini threshold.
+        for group, shift in ((0, 0.0), (1, 7.0)):
+            for _copy in range(4):
+                genome = neat_config.genome_type(next_id)
+                next_id += 1
+                genome.fitness = 1.0
+                genome.configure_crossover(
+                    founder, founder, neat_config.genome_config
+                )
+                for connection in genome.connections.values():
+                    connection.weight += shift
+                genomes[genome.key] = genome
+                assign_species(population, neat_config, genome)
+        organisms = []
+        expected = {}
+        for genome in genomes.values():
+            organism = type("Org", (), {})()
+            organism.genome = genome
+            organism.genome_id = genome.key
+            organism.energy = 10
+            organism.species_id = population.species.get_species_id(genome.key)
+            expected[genome.key] = organism.species_id
+            organisms.append(organism)
+        self.assertGreater(len(set(expected.values())), 1)
+        refresh_living_species(
+            population,
+            neat_config,
+            organisms,
+            {"target_species_count": 6, "min_species_count": 2, "max_species_count": 9},
+        )
+        for organism in organisms:
+            self.assertEqual(organism.species_id, expected[organism.genome_id])
+        self.assertIn(founder_id, expected.values())
+
 
 if __name__ == "__main__":
     unittest.main()
