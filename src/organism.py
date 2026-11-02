@@ -5,9 +5,13 @@ import random
 
 import neat
 
-from body_genes import apply_body_genes, inherit_body_genes
-from distance import colliding, distance, within_radius
+from body_genes import apply_body_genes
+from combat import hunt_prey as bite_prey
+from distance import distance, within_radius
+from egg import build_offspring, fertilize, tend_egg, uses_eggs
 from fitness import calculate_fitness
+from growth import bind_adult_body, grow_step
+from plant_strain import graze
 from logging_util import log_detailed
 from network_inputs import build_network_inputs
 from species_names import generate_scientific_name
@@ -70,6 +74,8 @@ class Organism:
         # Recent positions for renderer movement trails.
         self.movement_trail = []
         self._trail_max_length = 24
+        # Egg this adult is filling. None until a living-world mating.
+        self.carried_egg = None
         # Diet keyed by genome id when provided so gen-0 gets mixed roles.
         self._diet_key = diet_key if diet_key is not None else species_id
         self.is_carnivore = self._diet_from_species(self._diet_key)
@@ -164,6 +170,8 @@ class Organism:
             self.spike_length = min(8, max(3, 3 + density * 2))
         else:
             self.spike_length = 3
+        # Maturity scales the adult body. Founders and episodic agents stay at 1.
+        bind_adult_body(self)
 
     def take_action(
         self,
@@ -213,7 +221,10 @@ class Organism:
             self.energy = max(0, self.energy - self.movement_energy_cost)
         else:
             self.was_moving = False
-        if breeding_desire > 0.5 and self.can_breed():
+        if getattr(self, "carried_egg", None) is not None:
+            # Keep paying into the egg instead of fertilizing another.
+            tend_egg(self, breeding_desire)
+        elif breeding_desire > 0.5 and self.can_breed():
             self._try_breed(nearby_breeding_partners or nearby_organisms)
 
     def update(self, food_items, organisms):
@@ -232,6 +243,10 @@ class Organism:
         self.fitness_bonus += 0.05
         # Resting metabolism scales with size.
         self.energy -= 0.01 * self.size
+        # Juveniles spend surplus energy to approach the adult body.
+        grow_step(self)
+        if getattr(self, "health", 1) <= 0:
+            self.energy = 0
         # Track coarse cells for exploration fitness.
         rounded = (
             round(self.position[0] / 10) * 10,
@@ -278,71 +293,22 @@ class Organism:
         self.position = (x, y)
 
     def check_for_food(self, food_items):
-        """Herbivores consume the first colliding food pellet."""
-        # Carnivores and dead agents do not forage.
-        if self.energy <= 0 or self.is_carnivore:
-            return
-        food_energy = float(self.environment_config.get("food_energy_value", 75))
-        food_radius = 5
-        for food in food_items:
-            if food.position is None:
-                continue
-            if colliding(self.position, self.get_radius(), food.position, food_radius):
-                gain = food_energy * self.energy_efficiency
-                self.energy = min(self.max_energy, self.energy + gain)
-                self.food_consumed += 1
-                if self.steps_since_last_food > 0:
-                    self.avg_steps_between_food.append(self.steps_since_last_food)
-                    if len(self.avg_steps_between_food) > 10:
-                        self.avg_steps_between_food.pop(0)
-                self.steps_since_last_food = 0
-                food.position = None
-                self.fitness_bonus += 10
-                log_detailed(
-                    self.logging_level,
-                    f"Herbivore ate food; energy={self.energy:.1f}",
-                )
-                break
+        """Herbivores take one bite of a pellet they are touching."""
+        graze(self, food_items)
 
     def hunt_prey(self, organisms):
-        """Carnivores consume one eligible smaller prey on collision."""
-        if self.energy <= 0 or not self.is_carnivore:
-            return
-        for other in organisms:
-            if (
-                other is self
-                or other.is_carnivore
-                or other.energy <= 0
-                or other.position is None
-                or self.position is None
-            ):
-                continue
-            if not colliding(
-                self.position, self.get_radius(), other.position, other.get_radius()
-            ):
-                continue
-            # May eat prey up to 80% of own size (inclusive margin via >=).
-            if self.size >= other.size * 0.8:
-                gain = other.energy * 0.7
-                self.energy = min(self.max_energy, self.energy + gain)
-                self.organisms_consumed += 1
-                other.energy = 0
-                if self.steps_since_last_hunt > 0:
-                    self.avg_steps_between_hunts.append(self.steps_since_last_hunt)
-                    if len(self.avg_steps_between_hunts) > 10:
-                        self.avg_steps_between_hunts.pop(0)
-                self.steps_since_last_hunt = 0
-                self.fitness_bonus += 25
-                log_detailed(
-                    self.logging_level,
-                    f"Carnivore ate prey; energy={self.energy:.1f}",
-                )
-                break
+        """Carnivores bite one eligible smaller prey on collision."""
+        bite_prey(self, organisms)
 
     def can_breed(self):
         """Return True when energy, a meal, cooldown, and boundaries allow breeding."""
         # Unified energy gate (was inconsistently 50 vs 100).
         if self.energy < 100:
+            return False
+        # Juveniles and parents already filling an egg are not ready.
+        if getattr(self, "maturity", 1.0) < 0.99:
+            return False
+        if getattr(self, "carried_egg", None) is not None:
             return False
         # Starting energy is not income. A herbivore meal or a carnivore kill
         # has to happen before that reserve is spent on a child.
@@ -387,46 +353,16 @@ class Organism:
         if not partners:
             return
         partner = partners[0]
+        # Living world fills an egg. Episodic mode still births on this step.
+        if uses_eggs(self):
+            fertilize(self, partner)
+            return
         # Pay energy and reset cooldowns for both parents.
         self.energy -= 50
         partner.energy -= 50
         self.steps_since_breeding = 0
         partner.steps_since_breeding = 0
-        # Spawn near the midpoint of the parents.
-        spawn_x = (self.position[0] + partner.position[0]) / 2 + random.uniform(-5, 5)
-        spawn_y = (self.position[1] + partner.position[1]) / 2 + random.uniform(-5, 5)
-        width = self.environment_config["width"]
-        height = self.environment_config["height"]
-        spawn_x = max(0, min(spawn_x, width))
-        spawn_y = max(0, min(spawn_y, height))
-        # Rank parents by current fitness for NEAT crossover order.
-        self.genome.fitness = self.calculate_fitness()
-        partner.genome.fitness = partner.calculate_fitness()
-        if self.genome.fitness >= partner.genome.fitness:
-            parent1, parent2 = self.genome, partner.genome
-        else:
-            parent1, parent2 = partner.genome, self.genome
-        # Use a disposable id; child is NOT inserted into the NEAT population.
-        child_genome = type(self.genome)(0)
-        child_genome.configure_crossover(parent1, parent2, self.config.genome_config)
-        child_genome.mutate(self.config.genome_config)
-        # Body genes come from the fitter parent and then mutate. The brain
-        # already mutated above; color and diet are a separate inheritance.
-        inherit_body_genes(child_genome, parent1, parent2)
-        child = Organism(
-            child_genome,
-            self.config,
-            (spawn_x, spawn_y),
-            self.environment_config,
-            species_id=self.species_id,
-            diet_key=getattr(self, "_diet_key", self.species_id),
-            logging_level=self.logging_level,
-        )
-        offspring_energy = float(
-            self.environment_config.get("offspring_starting_energy", 50)
-        )
-        child.energy = min(offspring_energy, child.max_energy)
-        child.steps_since_breeding = 0
+        child, child_genome = build_offspring(self, partner)
         # Living-world harness integrates births into the gene pool.
         if self.simulation is not None:
             if hasattr(self.simulation, "register_birth"):

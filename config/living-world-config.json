@@ -36,6 +36,12 @@
     "boundary_penalty": 0.5,
     "breeding_cooldown": 200,
     "offspring_starting_energy": 150,
+    "eggs_enabled": true,
+    "egg_energy_goal": 80,
+    "egg_hatch_delay": 150,
+    "hatch_maturity": 0.35,
+    "growth_energy_cost": 0.15,
+    "growth_step": 0.004,
 
     "genesis_archetype_count": 8,
     "genesis_extra_hidden_nodes": 0,

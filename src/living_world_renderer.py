@@ -3,6 +3,7 @@
 import pygame
 
 from body_genes import body_color
+from plant_strain import pellet_color
 from body_traits import BodyTraits, draw_body
 from camera import Camera
 from genome_viz import build_genome_surface
@@ -205,7 +206,15 @@ class LivingWorldRenderer(RendererCommon):
                 continue
             sx, sy = self._world_to_viewport(food.position[0], food.position[1])
             if self._on_screen(sx, sy, 6):
-                pygame.draw.circle(surface, (80, 220, 90), (sx, sy), 3)
+                color = pellet_color(food)
+                radius = 2 if getattr(food, "regrow_in", 0) > 0 else 3
+                pygame.draw.circle(surface, color, (sx, sy), radius)
+        for egg in getattr(self, "_eggs_to_draw", ()):
+            if getattr(egg, "position", None) is None:
+                continue
+            sx, sy = self._world_to_viewport(egg.position[0], egg.position[1])
+            if self._on_screen(sx, sy, 8):
+                pygame.draw.circle(surface, (230, 210, 160), (sx, sy), 4)
 
     def _draw_trails(self, surface, organisms):
         """Draw movement trails with camera offset applied."""
@@ -328,7 +337,7 @@ class LivingWorldRenderer(RendererCommon):
             if food.position is None:
                 continue
             fx, fy = to_mini(food.position[0], food.position[1])
-            surface.set_at((fx, fy), (80, 200, 90))
+            surface.set_at((fx, fy), pellet_color(food))
         for organism in organisms[:300]:
             if organism.position is None or organism.energy <= 0:
                 continue

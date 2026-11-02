@@ -113,6 +113,10 @@ Movement and the decision to breed come from the four network outputs. Founders 
 
 Color, diet, and size are body genes, separate from the network, in the same split The Bibites use. A child copies the fitter parent's genes and nudges them, so a lineage stays a recognizable color and diet while the brain changes. Founders start as green grazers. The diet gene, not the species id, decides who hunts. Species id is only who they can breed with.
 
+Living-world births are eggs. Two adults fertilize one, a parent fills it from their energy, and it hatches small. Maturity climbs toward the adult size while energy is spare, and only adults breed. Carnivores bite: health is life, energy is fuel. A killing bite is what removes the prey.
+
+Plant pellets belong to strains on the nutrient clouds. A strain's relation gene drifts slowly. Symbiotic plants regrow when grazed and seed more often. Indifferent plants are an ordinary meal. Predatory plants deal health damage when bitten. Strains start near indifferent so the founding grazers can eat.
+
 ### Genesis bootstrap
 
 At startup the living world clones a few archetypes from the NEAT config so species groups share a topology. Extra nodes and links are optional; the defaults leave the `.ini` genome alone, because added connections increase body size and metabolism.
