@@ -79,9 +79,11 @@ class TestFoodEcology(unittest.TestCase):
         }
         ecology = FoodEcology(config)
         start = ecology.active_food_count()
+        cap = ecology.food_cap()
         for _ in range(200):
             ecology.tick()
         self.assertGreater(ecology.active_food_count(), start)
+        self.assertLessEqual(ecology.active_food_count(), cap)
 
     def test_scarcity_ratio_reflects_depletion(self):
         config = {
