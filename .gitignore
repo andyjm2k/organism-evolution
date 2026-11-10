@@ -1,4 +1,6 @@
 __pycache__/
+node_modules/
+web/dist/
 *.py[cod]
 *.egg-info/
 .venv/
