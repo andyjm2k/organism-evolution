@@ -116,6 +116,9 @@ export class FoodEcology {
     this.prune();
     this.trimToCap();
     if (!this.hasRoom()) {
+      this.releaseCrowdedPockets();
+    }
+    if (!this.hasRoom()) {
       return;
     }
     let boost = 1;
@@ -124,7 +127,7 @@ export class FoodEcology {
     }
     for (const cloud of this.clouds) {
       const rate = this.config.spawnRate * cloud.intensity * boost;
-      if (this.rng.random() < rate && this.hasRoom()) {
+      if (this.rng.random() < rate && this.hasRoom() && !this.pocketFull(cloud.position)) {
         this.foodItems.push(this.spawnNear(cloud));
       }
     }
@@ -142,7 +145,11 @@ export class FoodEcology {
     if (!this.hasRoom()) {
       return;
     }
-    this.foodItems.push(this.pellet(food.cloud, child));
+    const home = this.homeForSeed(food.cloud);
+    if (home && this.pocketFull(home.position)) {
+      return;
+    }
+    this.foodItems.push(this.pellet(home, child));
   }
 
   prune(): void {
@@ -222,6 +229,102 @@ export class FoodEcology {
     }
     cloud.strains.splice(worst, 1);
     cloud.strains.push(child);
+  }
+
+  /** A fast-regrowing patch cannot keep the whole food cap. */
+  private releaseCrowdedPockets(): void {
+    const share = this.pocketShare();
+    const groups = new Map<string, Food[]>();
+    for (const food of this.foodItems) {
+      if (!food.position) {
+        continue;
+      }
+      const key = this.pocketKey(food.position[0], food.position[1]);
+      const list = groups.get(key);
+      if (list) {
+        list.push(food);
+      } else {
+        groups.set(key, [food]);
+      }
+    }
+    let overflow = false;
+    for (const list of groups.values()) {
+      if (list.length <= share) {
+        continue;
+      }
+      for (const food of list.slice(share)) {
+        food.position = null;
+        overflow = true;
+      }
+    }
+    if (overflow) {
+      this.prune();
+    }
+  }
+
+  private pocketFull(position: [number, number]): boolean {
+    if (this.activeFoodCount() < this.foodCap() * 0.85) {
+      return false;
+    }
+    return this.countInPocket(position) >= this.pocketShare();
+  }
+
+  private homeForSeed(cloud: NutrientCloud | null): NutrientCloud | null {
+    if (!cloud || !this.pocketFull(cloud.position)) {
+      return cloud;
+    }
+    const other = this.emptiestCloud();
+    if (other && this.countInPocket(other.position) < this.pocketShare()) {
+      return other;
+    }
+    return cloud;
+  }
+
+  private emptiestCloud(): NutrientCloud | null {
+    let best: NutrientCloud | null = null;
+    let bestCount = Infinity;
+    for (const cloud of this.clouds) {
+      const count = this.countInPocket(cloud.position);
+      if (count < bestCount) {
+        best = cloud;
+        bestCount = count;
+      }
+    }
+    return best;
+  }
+
+  private countInPocket(position: [number, number]): number {
+    const key = this.pocketKey(position[0], position[1]);
+    let count = 0;
+    for (const food of this.foodItems) {
+      if (!food.position) {
+        continue;
+      }
+      if (this.pocketKey(food.position[0], food.position[1]) === key) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  private pocketShare(): number {
+    return Math.max(4, Math.floor(this.foodCap() / this.pocketCount()));
+  }
+
+  private pocketCount(): number {
+    const size = this.pocketSize();
+    const cols = Math.max(1, Math.ceil(this.config.width / size));
+    const rows = Math.max(1, Math.ceil(this.config.height / size));
+    return cols * rows;
+  }
+
+  private pocketSize(): number {
+    return 800;
+  }
+
+  private pocketKey(x: number, y: number): string {
+    const size = this.pocketSize();
+    return `${Math.floor(x / size)},${Math.floor(y / size)}`;
   }
 
   private trimToCap(): void {

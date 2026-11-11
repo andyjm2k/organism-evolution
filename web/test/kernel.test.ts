@@ -9,7 +9,7 @@ import { Camera } from "../src/render/camera";
 import { FitnessTracker } from "../src/sim/fitness-tracker";
 import { SelectionScheduler } from "../src/sim/selection";
 import { Egg } from "../src/sim/egg";
-import { FoodEcology } from "../src/sim/food-ecology";
+import { Food, FoodEcology } from "../src/sim/food-ecology";
 import { PopulationRegistry } from "../src/sim/registry";
 import { parseNeatConfig } from "../src/neat/config";
 import { readFileSync } from "node:fs";
@@ -185,5 +185,34 @@ describe("FoodEcology", () => {
     expect(ecology.scarcityRatio()).toBeCloseTo(19 / 20);
     ecology.tick();
     expect(ecology.clouds[0].position[0]).toBeGreaterThanOrEqual(0);
+  });
+
+  it("breaks a full food cap that has collapsed into one pocket", () => {
+    const ecology = new FoodEcology(
+      {
+        width: 1600,
+        height: 1600,
+        foodTarget: 10,
+        numFood: 0,
+        spawnRate: 0,
+        scarcityThreshold: 0.35,
+        scarcityMultiplier: 2.5,
+        cloudCount: 2,
+        cloudMin: 40,
+        cloudMax: 60,
+      },
+      new PythonRandom(2),
+    );
+    ecology.foodItems = [];
+    for (let i = 0; i < ecology.foodCap(); i += 1) {
+      const food = new Food(40, 40, null);
+      food.ecology = ecology;
+      ecology.foodItems.push(food);
+    }
+    expect(ecology.hasRoom()).toBe(false);
+    ecology.tick();
+    const inCorner = ecology.foodItems.filter((food) => food.position && food.position[0] < 800 && food.position[1] < 800).length;
+    expect(inCorner).toBeLessThan(ecology.foodCap());
+    expect(inCorner).toBeLessThanOrEqual(Math.max(4, Math.floor(ecology.foodCap() / 4)));
   });
 });
