@@ -118,7 +118,7 @@ describe("FitnessTracker and selection gate", () => {
     const genomes = new Map([[1, { fitness: null as number | null }]]);
     tracker.apply(genomes as never);
     expect(genomes.get(1)?.fitness).toBeGreaterThan(200);
-    const scheduler = new SelectionScheduler(4000, 120, 0.1, 0.03, new PythonRandom(1));
+    const scheduler = new SelectionScheduler(4000, 120, 0.1, 0.03, 1000, new PythonRandom(1));
     expect(scheduler.shouldRun(0)).toBe(false);
     expect(scheduler.shouldRun(4000)).toBe(true);
   });
@@ -149,6 +149,9 @@ describe("PopulationRegistry", () => {
     registry.replaceAll(bodies as never, 3);
     const removed = registry.cullWorst((id) => id, 1, new Set([1]));
     expect(removed).toEqual([2]);
+    expect(registry.has(1)).toBe(true);
+    const spared = registry.cullWorst((id) => id, 1, new Set([1]), true);
+    expect(spared).toEqual([]);
     expect(registry.has(1)).toBe(true);
   });
 });

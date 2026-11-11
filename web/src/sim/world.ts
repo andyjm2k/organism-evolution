@@ -90,6 +90,7 @@ export class LivingWorld {
   births = 0;
   log: string[] = [];
   eggs: Egg[] = [];
+  fitnessCullMinSteps = 1000;
   private pending: Organism[] = [];
   scores = new Map<string, ScoreRecord>();
   private foodGrid: SpatialGrid<Food>;
@@ -114,11 +115,13 @@ export class LivingWorld {
       num(sim, "fitness_food_weight", 100),
       num(sim, "fitness_kill_weight", 100),
     );
+    this.fitnessCullMinSteps = Math.max(0, num(sim, "fitness_cull_min_steps", 1000));
     this.selection = new SelectionScheduler(
       num(sim, "selection_interval_steps", 4000),
       num(sim, "max_population", 120),
       num(sim, "cull_fraction", 0.1),
       num(sim, "immigration_rate", 0.03),
+      this.fitnessCullMinSteps,
       this.rng,
     );
     this.band = {
@@ -161,11 +164,13 @@ export class LivingWorld {
 
   registerBirth(child: Organism, childGenome: Genome, parentA: Organism, parentB: Organism): void {
     if (this.registry.atCapacity()) {
-      this.registry.cullWorst(
-        (id) => this.fitness.get(id),
-        1,
-        new Set([parentA.genomeId, parentB.genomeId]),
-      );
+      const protect = new Set([parentA.genomeId, parentB.genomeId]);
+      for (const organism of this.registry.alive()) {
+        if (organism.stepsTaken < this.fitnessCullMinSteps) {
+          protect.add(organism.genomeId);
+        }
+      }
+      this.registry.cullWorst((id) => this.fitness.get(id), 1, protect);
     }
     const genomeId = this.registry.addBirth(childGenome, child);
     const living = new Set(

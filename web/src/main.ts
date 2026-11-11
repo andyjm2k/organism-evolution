@@ -196,6 +196,7 @@ document.querySelector("#restart")!.addEventListener("click", () => {
   const data = new FormData(form);
   seed = clampInt(String(data.get("seed") ?? seed), seed, 1, 1_000_000_000);
   sim.max_population = clampInt(String(data.get("max_population") ?? ""), numberConfig("max_population", 120), 4, 400);
+  sim.fitness_cull_min_steps = clampInt(String(data.get("fitness_cull_min_steps") ?? ""), numberConfig("fitness_cull_min_steps", 1000), 0, 100_000);
   sim.breeding_cooldown = clampInt(String(data.get("breeding_cooldown") ?? ""), numberConfig("breeding_cooldown", 200), 1, 100000);
   sim.food_target_density = clampInt(String(data.get("food_target_density") ?? ""), numberConfig("food_target_density", 200), 1, 5000);
   sim.num_food_items = sim.food_target_density;
@@ -365,6 +366,7 @@ function clampInt(raw: string | null, fallback: number, min: number, max: number
 function fillSettings(): void {
   (form.elements.namedItem("seed") as HTMLInputElement).value = String(seed);
   (form.elements.namedItem("max_population") as HTMLInputElement).value = String(numberConfig("max_population", 120));
+  (form.elements.namedItem("fitness_cull_min_steps") as HTMLInputElement).value = String(numberConfig("fitness_cull_min_steps", 1000));
   (form.elements.namedItem("breeding_cooldown") as HTMLInputElement).value = String(numberConfig("breeding_cooldown", 200));
   (form.elements.namedItem("food_target_density") as HTMLInputElement).value = String(numberConfig("food_target_density", 200));
   const maxSteps = sim.max_world_steps;

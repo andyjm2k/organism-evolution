@@ -12,6 +12,7 @@
     "selection_interval_steps": 4000,
     "immigration_rate": 0.03,
     "cull_fraction": 0.1,
+    "fitness_cull_min_steps": 1000,
     "target_species_count": 6,
     "min_species_count": 4,
     "max_species_count": 9,

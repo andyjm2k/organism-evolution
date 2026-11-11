@@ -20,6 +20,7 @@ export class SelectionScheduler {
     readonly maxPopulation: number,
     readonly cullFraction: number,
     readonly immigrationRate: number,
+    readonly minAgeSteps: number,
     private rng: PythonRandom,
   ) {}
 
@@ -44,10 +45,16 @@ export class SelectionScheduler {
       return;
     }
     fitness.apply(population.genomes);
-    if (registry.count() >= this.maxPopulation) {
-      const cullCount = Math.max(1, Math.trunc(alive.length * this.cullFraction));
-      const culled = registry.cullWorst((id) => fitness.get(id), cullCount);
-      log(`Selection: culled ${culled.length} organisms at capacity (${registry.count()} remain)`);
+    const young = new Set(
+      alive.filter((organism) => organism.stepsTaken < this.minAgeSteps).map((organism) => organism.genomeId),
+    );
+    const eligible = alive.length - young.size;
+    if (eligible > 0) {
+      const cullCount = Math.max(1, Math.trunc(eligible * this.cullFraction));
+      const culled = registry.cullWorst((id) => fitness.get(id), cullCount, young, true);
+      log(
+        `Selection: removed ${culled.length} lowest-fitness organisms older than ${this.minAgeSteps} steps (${registry.count()} remain)`,
+      );
     }
     const deficit = this.maxPopulation - registry.count();
     if (deficit > 0 && this.rng.random() < this.immigrationRate) {
