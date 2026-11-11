@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Living World</title>
+    <link rel="icon" href="./favicon.svg" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="stage">
+        <canvas id="world"></canvas>
+        <div id="hud"></div>
+        <div id="controls">
+          <button type="button" id="pause">Pause</button>
+          <button type="button" id="sense">Senses</button>
+          <button type="button" id="track">Track</button>
+          <button type="button" id="clear">Clear</button>
+          <button type="button" id="fast">Fast 2×</button>
+          <button type="button" id="save">Save</button>
+          <button type="button" id="load">Load</button>
+          <button type="button" id="settings">Settings</button>
+          <button type="button" id="species-toggle">Species</button>
+        </div>
+        <aside id="panel" hidden></aside>
+        <p id="status"></p>
+      </div>
+      <aside id="board">
+        <h2>Species</h2>
+        <div id="species"></div>
+        <h2>Log</h2>
+        <pre id="log"></pre>
+      </aside>
+    </div>
+    <dialog id="settings-dialog">
+      <form method="dialog" id="settings-form">
+        <h2>World settings</h2>
+        <label>Seed <input name="seed" type="number" min="1" step="1" /></label>
+        <label>Max steps <input name="max_world_steps" type="number" min="1" step="1" placeholder="until you leave" /></label>
+        <label>Population cap <input name="max_population" type="number" min="4" max="400" step="1" /></label>
+        <label>Breeding cooldown <input name="breeding_cooldown" type="number" min="1" step="1" /></label>
+        <label>Food target <input name="food_target_density" type="number" min="1" step="1" /></label>
+        <menu>
+          <button type="submit" value="cancel">Cancel</button>
+          <button type="submit" value="restart" id="restart">Restart</button>
+        </menu>
+      </form>
+    </dialog>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
