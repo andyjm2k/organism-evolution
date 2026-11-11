@@ -225,13 +225,6 @@ function drawScene(
     ctx.arc(sx, sy, food.regrowing ? 2 : 3, 0, Math.PI * 2);
     ctx.fill();
   }
-  for (const egg of snapshot.eggs) {
-    const [sx, sy] = camera.worldToScreen(egg.x, egg.y);
-    ctx.beginPath();
-    ctx.fillStyle = "rgb(230,210,160)";
-    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
   drawOrgansAndChrome(ctx, snapshot, camera, width, height, options);
 }
 
@@ -245,6 +238,16 @@ function drawOrgansAndChrome(
 ): void {
   for (const body of snapshot.bodies.slice(0, 800)) {
     drawTrail(ctx, body, camera);
+  }
+  for (const egg of snapshot.eggs) {
+    const [sx, sy] = camera.worldToScreen(egg.x, egg.y);
+    ctx.beginPath();
+    ctx.fillStyle = "rgb(245,236,214)";
+    ctx.strokeStyle = "rgb(90,70,40)";
+    ctx.lineWidth = 1;
+    ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
   }
   const selected = snapshot.bodies.find((body) => options && body.id === options.selectedId);
   if (selected && options?.showRings) {

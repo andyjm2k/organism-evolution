@@ -56,6 +56,7 @@ export interface WorldSnapshot {
   speciesCount: number;
   births: number;
   alive: number;
+  capacity: number;
   bodies: BodySnapshot[];
   foods: { x: number; y: number; color: [number, number, number]; regrowing: boolean }[];
   eggs: { x: number; y: number }[];
@@ -160,7 +161,11 @@ export class LivingWorld {
 
   registerBirth(child: Organism, childGenome: Genome, parentA: Organism, parentB: Organism): void {
     if (this.registry.atCapacity()) {
-      this.registry.cullWorst((id) => this.fitness.get(id), 1);
+      this.registry.cullWorst(
+        (id) => this.fitness.get(id),
+        1,
+        new Set([parentA.genomeId, parentB.genomeId]),
+      );
     }
     const genomeId = this.registry.addBirth(childGenome, child);
     const living = new Set(
@@ -267,6 +272,7 @@ export class LivingWorld {
       speciesCount: new Set(bodies.map((body) => body.speciesId)).size,
       births: this.births,
       alive: bodies.length,
+      capacity: this.registry.maxPopulation,
       bodies,
       foods,
       eggs,
@@ -331,6 +337,10 @@ export class LivingWorld {
     const waiting: Egg[] = [];
     for (const egg of this.eggs) {
       if (egg.tick()) {
+        if (egg.position) {
+          egg.child.position = [egg.position[0], egg.position[1]];
+          egg.child.lastPosition = [egg.position[0], egg.position[1]];
+        }
         this.registerBirth(egg.child, egg.childGenome, egg.parent, egg.partner);
       } else {
         waiting.push(egg);

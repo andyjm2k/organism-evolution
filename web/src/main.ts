@@ -4,6 +4,7 @@ import { Camera } from "./render/camera";
 import { minimapRect, WorldView } from "./render/view";
 import type { SimConfig, WorldSnapshot } from "./sim/world";
 
+const app = document.querySelector("#app") as HTMLElement;
 const stage = document.querySelector("#stage") as HTMLElement;
 const canvas = document.querySelector("#world") as HTMLCanvasElement;
 const hud = document.querySelector("#hud") as HTMLElement;
@@ -175,7 +176,17 @@ document.querySelector("#fast")!.addEventListener("click", () => {
 document.querySelector("#save")!.addEventListener("click", () => worker.postMessage({ type: "save" }));
 document.querySelector("#load")!.addEventListener("click", () => void loadSave());
 document.querySelector("#settings")!.addEventListener("click", () => dialog.showModal());
-document.querySelector("#species-toggle")!.addEventListener("click", () => board.classList.toggle("open"));
+document.querySelector("#species-toggle")!.addEventListener("click", () => {
+  if (window.matchMedia("(max-width: 800px)").matches) {
+    app.classList.toggle("species-open");
+  } else {
+    app.classList.toggle("species-closed");
+  }
+});
+document.querySelector("#board-close")!.addEventListener("click", () => {
+  app.classList.remove("species-open");
+  app.classList.add("species-closed");
+});
 form.addEventListener("submit", () => {
   if ((document.activeElement as HTMLButtonElement | null)?.value !== "restart" && form.returnValue !== "restart") {
     return;
@@ -205,7 +216,7 @@ function renderHud(): void {
     return;
   }
   const track = tracking && selectedId !== null ? "ON" : "OFF";
-  hud.textContent = `Step ${snapshot.step} | Food ${snapshot.foodCount} (${Math.round(snapshot.scarcity * 100)}%) | Species ${snapshot.speciesCount} | Track ${track}`;
+  hud.textContent = `Step ${snapshot.step} | Alive ${snapshot.alive}/${snapshot.capacity} | Food ${snapshot.foodCount} (${Math.round(snapshot.scarcity * 100)}%) | Species ${snapshot.speciesCount} | Track ${track}`;
   speciesEl.replaceChildren();
   if (snapshot.scoreboard.length === 0) {
     const empty = document.createElement("p");
@@ -234,9 +245,20 @@ function renderPanel(): void {
   }
   panel.hidden = false;
   panel.replaceChildren();
+  const header = document.createElement("div");
+  header.id = "panel-head";
   const title = document.createElement("h3");
   title.textContent = `Species ${body.speciesId}`;
-  panel.appendChild(title);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "Close";
+  close.addEventListener("click", () => {
+    selectedId = null;
+    tracking = false;
+    panel.hidden = true;
+  });
+  header.append(title, close);
+  panel.appendChild(header);
   const lines = [
     `${body.carnivore ? "Carnivore" : "Herbivore"} ${body.diet.toFixed(2)} | Energy ${Math.round(body.energy)}/${Math.round(body.maxEnergy)}`,
     `Age ${body.age} steps`,

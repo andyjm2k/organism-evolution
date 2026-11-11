@@ -91,9 +91,12 @@ export class PopulationRegistry {
     return dead;
   }
 
-  /** Lowest selection fitness first. */
-  cullWorst(score: (genomeId: number) => number, count: number): number[] {
-    const ranked = this.alive().sort((a, b) => score(a.genomeId) - score(b.genomeId));
+  /** Lowest selection fitness first. Protected ids are skipped while someone else can go. */
+  cullWorst(score: (genomeId: number) => number, count: number, protect?: Set<number>): number[] {
+    const living = this.alive().sort((a, b) => score(a.genomeId) - score(b.genomeId));
+    const spared = protect ?? new Set<number>();
+    const preferred = living.filter((organism) => !spared.has(organism.genomeId));
+    const ranked = preferred.length > 0 ? preferred : living;
     const removed: number[] = [];
     for (const organism of ranked.slice(0, Math.max(0, count))) {
       organism.energy = 0;
