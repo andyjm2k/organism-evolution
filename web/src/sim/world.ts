@@ -170,7 +170,8 @@ export class LivingWorld {
           protect.add(organism.genomeId);
         }
       }
-      this.registry.cullWorst((id) => this.fitness.get(id), 1, protect);
+      const age = new Map(this.registry.alive().map((organism) => [organism.genomeId, organism.stepsTaken]));
+      this.registry.cullWorst((id) => this.fitness.perStep(id, age.get(id) ?? 1), 1, protect);
     }
     const genomeId = this.registry.addBirth(childGenome, child);
     const living = new Set(

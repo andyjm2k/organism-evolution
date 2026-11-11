@@ -47,6 +47,6 @@ describe("python golden digest", () => {
     );
     aged.steps(30);
     expect(aged.registry.count()).toBeLessThan(60);
-    expect(aged.log.some((line) => line.includes("lowest-fitness"))).toBe(true);
+    expect(aged.log.some((line) => line.includes("fitness-per-step"))).toBe(true);
   });
 });

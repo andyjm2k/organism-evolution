@@ -113,6 +113,7 @@ describe("FitnessTracker and selection gate", () => {
     tracker.tickAlive(organism);
     expect(tracker.get(1)).toBeCloseTo(0.5 * 2 + 200);
     tracker.recordOffspring([1, null]);
+    expect(tracker.perStep(1, 1000)).toBeLessThan(tracker.perStep(1, 10));
     expect(tracker.top(1)).toEqual([1]);
     tracker.finalizeDeath(organism, 10);
     const genomes = new Map([[1, { fitness: null as number | null }]]);

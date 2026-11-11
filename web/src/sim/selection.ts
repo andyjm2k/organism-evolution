@@ -51,9 +51,10 @@ export class SelectionScheduler {
     const eligible = alive.length - young.size;
     if (eligible > 0) {
       const cullCount = Math.max(1, Math.trunc(eligible * this.cullFraction));
-      const culled = registry.cullWorst((id) => fitness.get(id), cullCount, young, true);
+      const age = new Map(alive.map((organism) => [organism.genomeId, organism.stepsTaken]));
+      const culled = registry.cullWorst((id) => fitness.perStep(id, age.get(id) ?? 1), cullCount, young, true);
       log(
-        `Selection: removed ${culled.length} lowest-fitness organisms older than ${this.minAgeSteps} steps (${registry.count()} remain)`,
+        `Selection: removed ${culled.length} lowest-fitness-per-step organisms older than ${this.minAgeSteps} steps (${registry.count()} remain)`,
       );
     }
     const deficit = this.maxPopulation - registry.count();
