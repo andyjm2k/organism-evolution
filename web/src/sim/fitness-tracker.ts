@@ -29,6 +29,11 @@ export class FitnessTracker {
     return this.scores.get(genomeId) ?? 0;
   }
 
+  /** Score divided by age, so a long life of merely surviving does not outrank a short successful one. */
+  perStep(genomeId: number, stepsTaken: number): number {
+    return this.get(genomeId) / Math.max(1, stepsTaken);
+  }
+
   recordOffspring(parentIds: (number | null)[]): void {
     for (const genomeId of parentIds) {
       if (genomeId === null) {

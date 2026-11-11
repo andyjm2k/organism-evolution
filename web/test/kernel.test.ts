@@ -10,6 +10,7 @@ import { FitnessTracker } from "../src/sim/fitness-tracker";
 import { SelectionScheduler } from "../src/sim/selection";
 import { Egg } from "../src/sim/egg";
 import { FoodEcology } from "../src/sim/food-ecology";
+import { PopulationRegistry } from "../src/sim/registry";
 import { parseNeatConfig } from "../src/neat/config";
 import { readFileSync } from "node:fs";
 
@@ -112,12 +113,13 @@ describe("FitnessTracker and selection gate", () => {
     tracker.tickAlive(organism);
     expect(tracker.get(1)).toBeCloseTo(0.5 * 2 + 200);
     tracker.recordOffspring([1, null]);
+    expect(tracker.perStep(1, 1000)).toBeLessThan(tracker.perStep(1, 10));
     expect(tracker.top(1)).toEqual([1]);
     tracker.finalizeDeath(organism, 10);
     const genomes = new Map([[1, { fitness: null as number | null }]]);
     tracker.apply(genomes as never);
     expect(genomes.get(1)?.fitness).toBeGreaterThan(200);
-    const scheduler = new SelectionScheduler(4000, 120, 0.1, 0.03, new PythonRandom(1));
+    const scheduler = new SelectionScheduler(4000, 120, 0.1, 0.03, 1000, new PythonRandom(1));
     expect(scheduler.shouldRun(0)).toBe(false);
     expect(scheduler.shouldRun(4000)).toBe(true);
   });
@@ -135,6 +137,23 @@ describe("Egg", () => {
     egg.lay([3, 4]);
     expect(egg.tick()).toBe(false);
     expect(egg.tick()).toBe(true);
+  });
+});
+
+describe("PopulationRegistry", () => {
+  it("culls someone else before a protected parent", () => {
+    const text = readFileSync(new URL("../../config/neat-config.ini", import.meta.url), "utf8");
+    const registry = new PopulationRegistry(2, {} as never, parseNeatConfig(text), new PythonRandom(1));
+    const bodies = new Map<number, { energy: number; position: [number, number]; genomeId: number }>();
+    bodies.set(1, { energy: 10, position: [0, 0], genomeId: 1 });
+    bodies.set(2, { energy: 10, position: [1, 1], genomeId: 2 });
+    registry.replaceAll(bodies as never, 3);
+    const removed = registry.cullWorst((id) => id, 1, new Set([1]));
+    expect(removed).toEqual([2]);
+    expect(registry.has(1)).toBe(true);
+    const spared = registry.cullWorst((id) => id, 1, new Set([1]), true);
+    expect(spared).toEqual([]);
+    expect(registry.has(1)).toBe(true);
   });
 });
 

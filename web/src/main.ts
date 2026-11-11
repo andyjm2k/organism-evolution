@@ -4,6 +4,7 @@ import { Camera } from "./render/camera";
 import { minimapRect, WorldView } from "./render/view";
 import type { SimConfig, WorldSnapshot } from "./sim/world";
 
+const app = document.querySelector("#app") as HTMLElement;
 const stage = document.querySelector("#stage") as HTMLElement;
 const canvas = document.querySelector("#world") as HTMLCanvasElement;
 const hud = document.querySelector("#hud") as HTMLElement;
@@ -175,7 +176,17 @@ document.querySelector("#fast")!.addEventListener("click", () => {
 document.querySelector("#save")!.addEventListener("click", () => worker.postMessage({ type: "save" }));
 document.querySelector("#load")!.addEventListener("click", () => void loadSave());
 document.querySelector("#settings")!.addEventListener("click", () => dialog.showModal());
-document.querySelector("#species-toggle")!.addEventListener("click", () => board.classList.toggle("open"));
+document.querySelector("#species-toggle")!.addEventListener("click", () => {
+  if (window.matchMedia("(max-width: 800px)").matches) {
+    app.classList.toggle("species-open");
+  } else {
+    app.classList.toggle("species-closed");
+  }
+});
+document.querySelector("#board-close")!.addEventListener("click", () => {
+  app.classList.remove("species-open");
+  app.classList.add("species-closed");
+});
 form.addEventListener("submit", () => {
   if ((document.activeElement as HTMLButtonElement | null)?.value !== "restart" && form.returnValue !== "restart") {
     return;
@@ -185,6 +196,7 @@ document.querySelector("#restart")!.addEventListener("click", () => {
   const data = new FormData(form);
   seed = clampInt(String(data.get("seed") ?? seed), seed, 1, 1_000_000_000);
   sim.max_population = clampInt(String(data.get("max_population") ?? ""), numberConfig("max_population", 120), 4, 400);
+  sim.fitness_cull_min_steps = clampInt(String(data.get("fitness_cull_min_steps") ?? ""), numberConfig("fitness_cull_min_steps", 1000), 0, 100_000);
   sim.breeding_cooldown = clampInt(String(data.get("breeding_cooldown") ?? ""), numberConfig("breeding_cooldown", 200), 1, 100000);
   sim.food_target_density = clampInt(String(data.get("food_target_density") ?? ""), numberConfig("food_target_density", 200), 1, 5000);
   sim.num_food_items = sim.food_target_density;
@@ -205,7 +217,7 @@ function renderHud(): void {
     return;
   }
   const track = tracking && selectedId !== null ? "ON" : "OFF";
-  hud.textContent = `Step ${snapshot.step} | Food ${snapshot.foodCount} (${Math.round(snapshot.scarcity * 100)}%) | Species ${snapshot.speciesCount} | Track ${track}`;
+  hud.textContent = `Step ${snapshot.step} | Alive ${snapshot.alive}/${snapshot.capacity} | Food ${snapshot.foodCount} (${Math.round(snapshot.scarcity * 100)}%) | Species ${snapshot.speciesCount} | Track ${track}`;
   speciesEl.replaceChildren();
   if (snapshot.scoreboard.length === 0) {
     const empty = document.createElement("p");
@@ -234,9 +246,20 @@ function renderPanel(): void {
   }
   panel.hidden = false;
   panel.replaceChildren();
+  const header = document.createElement("div");
+  header.id = "panel-head";
   const title = document.createElement("h3");
   title.textContent = `Species ${body.speciesId}`;
-  panel.appendChild(title);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "Close";
+  close.addEventListener("click", () => {
+    selectedId = null;
+    tracking = false;
+    panel.hidden = true;
+  });
+  header.append(title, close);
+  panel.appendChild(header);
   const lines = [
     `${body.carnivore ? "Carnivore" : "Herbivore"} ${body.diet.toFixed(2)} | Energy ${Math.round(body.energy)}/${Math.round(body.maxEnergy)}`,
     `Age ${body.age} steps`,
@@ -343,6 +366,7 @@ function clampInt(raw: string | null, fallback: number, min: number, max: number
 function fillSettings(): void {
   (form.elements.namedItem("seed") as HTMLInputElement).value = String(seed);
   (form.elements.namedItem("max_population") as HTMLInputElement).value = String(numberConfig("max_population", 120));
+  (form.elements.namedItem("fitness_cull_min_steps") as HTMLInputElement).value = String(numberConfig("fitness_cull_min_steps", 1000));
   (form.elements.namedItem("breeding_cooldown") as HTMLInputElement).value = String(numberConfig("breeding_cooldown", 200));
   (form.elements.namedItem("food_target_density") as HTMLInputElement).value = String(numberConfig("food_target_density", 200));
   const maxSteps = sim.max_world_steps;

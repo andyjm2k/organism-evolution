@@ -31,4 +31,22 @@ describe("python golden digest", () => {
     restored.stepOnce();
     expect(restored.digest()).toEqual(original.digest());
   });
+
+  it("removes the lowest fitness bodies only after they pass the age threshold", () => {
+    const early = LivingWorld.create(
+      { ...sim, render: false, max_world_steps: null, selection_interval_steps: 30, fitness_cull_min_steps: 10_000, cull_fraction: 0.5 },
+      neat,
+      1,
+    );
+    early.steps(30);
+    expect(early.registry.count()).toBe(60);
+    const aged = LivingWorld.create(
+      { ...sim, render: false, max_world_steps: null, selection_interval_steps: 30, fitness_cull_min_steps: 1, cull_fraction: 0.5 },
+      neat,
+      1,
+    );
+    aged.steps(30);
+    expect(aged.registry.count()).toBeLessThan(60);
+    expect(aged.log.some((line) => line.includes("fitness-per-step"))).toBe(true);
+  });
 });

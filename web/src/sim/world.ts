@@ -56,6 +56,7 @@ export interface WorldSnapshot {
   speciesCount: number;
   births: number;
   alive: number;
+  capacity: number;
   bodies: BodySnapshot[];
   foods: { x: number; y: number; color: [number, number, number]; regrowing: boolean }[];
   eggs: { x: number; y: number }[];
@@ -89,6 +90,7 @@ export class LivingWorld {
   births = 0;
   log: string[] = [];
   eggs: Egg[] = [];
+  fitnessCullMinSteps = 1000;
   private pending: Organism[] = [];
   scores = new Map<string, ScoreRecord>();
   private foodGrid: SpatialGrid<Food>;
@@ -113,11 +115,13 @@ export class LivingWorld {
       num(sim, "fitness_food_weight", 100),
       num(sim, "fitness_kill_weight", 100),
     );
+    this.fitnessCullMinSteps = Math.max(0, num(sim, "fitness_cull_min_steps", 1000));
     this.selection = new SelectionScheduler(
       num(sim, "selection_interval_steps", 4000),
       num(sim, "max_population", 120),
       num(sim, "cull_fraction", 0.1),
       num(sim, "immigration_rate", 0.03),
+      this.fitnessCullMinSteps,
       this.rng,
     );
     this.band = {
@@ -160,7 +164,14 @@ export class LivingWorld {
 
   registerBirth(child: Organism, childGenome: Genome, parentA: Organism, parentB: Organism): void {
     if (this.registry.atCapacity()) {
-      this.registry.cullWorst((id) => this.fitness.get(id), 1);
+      const protect = new Set([parentA.genomeId, parentB.genomeId]);
+      for (const organism of this.registry.alive()) {
+        if (organism.stepsTaken < this.fitnessCullMinSteps) {
+          protect.add(organism.genomeId);
+        }
+      }
+      const age = new Map(this.registry.alive().map((organism) => [organism.genomeId, organism.stepsTaken]));
+      this.registry.cullWorst((id) => this.fitness.perStep(id, age.get(id) ?? 1), 1, protect);
     }
     const genomeId = this.registry.addBirth(childGenome, child);
     const living = new Set(
@@ -267,6 +278,7 @@ export class LivingWorld {
       speciesCount: new Set(bodies.map((body) => body.speciesId)).size,
       births: this.births,
       alive: bodies.length,
+      capacity: this.registry.maxPopulation,
       bodies,
       foods,
       eggs,
@@ -331,6 +343,10 @@ export class LivingWorld {
     const waiting: Egg[] = [];
     for (const egg of this.eggs) {
       if (egg.tick()) {
+        if (egg.position) {
+          egg.child.position = [egg.position[0], egg.position[1]];
+          egg.child.lastPosition = [egg.position[0], egg.position[1]];
+        }
         this.registerBirth(egg.child, egg.childGenome, egg.parent, egg.partner);
       } else {
         waiting.push(egg);

@@ -27,7 +27,10 @@
         <p id="status"></p>
       </div>
       <aside id="board">
-        <h2>Species</h2>
+        <div id="board-head">
+          <h2>Species</h2>
+          <button type="button" id="board-close">Close</button>
+        </div>
         <div id="species"></div>
         <h2>Log</h2>
         <pre id="log"></pre>
@@ -39,6 +42,7 @@
         <label>Seed <input name="seed" type="number" min="1" step="1" /></label>
         <label>Max steps <input name="max_world_steps" type="number" min="1" step="1" placeholder="until you leave" /></label>
         <label>Population cap <input name="max_population" type="number" min="4" max="400" step="1" /></label>
+        <label>Fitness cull after steps <input name="fitness_cull_min_steps" type="number" min="0" step="1" /></label>
         <label>Breeding cooldown <input name="breeding_cooldown" type="number" min="1" step="1" /></label>
         <label>Food target <input name="food_target_density" type="number" min="1" step="1" /></label>
         <menu>
