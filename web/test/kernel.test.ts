@@ -77,7 +77,7 @@ describe("BodyTraits", () => {
         ["b", { inNode: -19, outNode: 1, weight: 2, enabled: false, innovation: 2 }],
       ]),
     };
-    const traits = BodyTraits.fromGenome(genome as never, false);
+    const traits = BodyTraits.fromGenome(genome as never, 0);
     expect(traits.jaw).toBeCloseTo(1.8);
     expect(traits.horn).toBe(0);
     expect(traits.present().map(([label]) => label)).toEqual(["Jaw"]);

@@ -2,6 +2,7 @@
 
 import { Camera } from "./render/camera";
 import { minimapRect, WorldView } from "./render/view";
+import { dietLabel } from "./sim/body-genes";
 import type { SimConfig, WorldSnapshot } from "./sim/world";
 
 const app = document.querySelector("#app") as HTMLElement;
@@ -230,7 +231,7 @@ function renderHud(): void {
     const name = document.createElement("strong");
     name.textContent = row.name;
     const detail = document.createElement("span");
-    detail.textContent = `${row.carnivore ? "Carnivore" : "Herbivore"} · fitness ${Math.round(row.fitness)}`;
+    detail.textContent = `${dietLabel(row.diet)} · fitness ${Math.round(row.fitness)}`;
     card.append(name, detail);
     speciesEl.appendChild(card);
   }
@@ -261,7 +262,7 @@ function renderPanel(): void {
   header.append(title, close);
   panel.appendChild(header);
   const lines = [
-    `${body.carnivore ? "Carnivore" : "Herbivore"} ${body.diet.toFixed(2)} | Energy ${Math.round(body.energy)}/${Math.round(body.maxEnergy)}`,
+    `${dietLabel(body.diet)} ${body.diet.toFixed(2)} | Energy ${Math.round(body.energy)}/${Math.round(body.maxEnergy)}`,
     `Age ${body.age} steps`,
     `Food ${body.food} | Hunts ${body.hunts}`,
     `Fitness ${Math.round(body.fitness)}`,

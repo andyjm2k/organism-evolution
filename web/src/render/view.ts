@@ -2,6 +2,7 @@
 
 import type { Camera } from "./camera";
 import type { BodySnapshot, WorldSnapshot } from "../sim/world";
+import { plantIntake } from "../sim/body-genes";
 import { VISIBLE_STRENGTH } from "../sim/body-traits";
 
 export interface ViewOptions {
@@ -290,7 +291,7 @@ function drawTrail(ctx: CanvasRenderingContext2D, body: BodySnapshot, camera: Ca
 function drawRings(ctx: CanvasRenderingContext2D, body: BodySnapshot, camera: Camera, options: ViewOptions): void {
   const [sx, sy] = camera.worldToScreen(body.x, body.y);
   const rings: [number, string][] = [];
-  if (!body.carnivore) {
+  if (plantIntake(body.diet) > 0) {
     rings.push([options.foodRadius, "rgba(80,180,100,0.35)"]);
   }
   rings.push([options.threatRadius, "rgba(220,90,70,0.35)"]);

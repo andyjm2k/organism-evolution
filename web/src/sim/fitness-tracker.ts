@@ -1,6 +1,7 @@
 /** Lifetime selection fitness. Meals and kills score once, not every step. */
 
 import type { Genome } from "../neat/genome";
+import { huntIntake, plantIntake } from "./body-genes";
 import type { Organism } from "./organism";
 
 export class FitnessTracker {
@@ -49,17 +50,15 @@ export class FitnessTracker {
     const genomeId = organism.genomeId;
     this.init(genomeId);
     this.scores.set(genomeId, this.get(genomeId) + this.survivalWeight);
-    if (organism.isCarnivore) {
-      const total = organism.organismsConsumed;
-      const gained = Math.max(0, total - (this.kills.get(genomeId) ?? 0));
-      this.kills.set(genomeId, total);
-      this.scores.set(genomeId, this.get(genomeId) + this.killWeight * gained);
-    } else {
-      const total = organism.foodConsumed;
-      const gained = Math.max(0, total - (this.meals.get(genomeId) ?? 0));
-      this.meals.set(genomeId, total);
-      this.scores.set(genomeId, this.get(genomeId) + this.foodWeight * gained);
-    }
+    const diet = typeof organism.diet === "number" ? organism.diet : organism.isCarnivore ? 1 : 0;
+    const meals = Math.max(0, organism.foodConsumed - (this.meals.get(genomeId) ?? 0));
+    const kills = Math.max(0, organism.organismsConsumed - (this.kills.get(genomeId) ?? 0));
+    this.meals.set(genomeId, organism.foodConsumed);
+    this.kills.set(genomeId, organism.organismsConsumed);
+    this.scores.set(
+      genomeId,
+      this.get(genomeId) + this.foodWeight * meals * plantIntake(diet) + this.killWeight * kills * huntIntake(diet),
+    );
   }
 
   finalizeDeath(organism: Organism, displayFitness: number): void {

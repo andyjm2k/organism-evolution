@@ -1,6 +1,7 @@
 /** Display fitness. The tiny uniform noise is part of the shared random stream. */
 
 import type { PythonRandom } from "../rng/python-random";
+import { huntIntake, plantIntake } from "./body-genes";
 import type { Organism } from "./organism";
 
 export function calculateFitness(
@@ -10,7 +11,7 @@ export function calculateFitness(
   rng: PythonRandom,
 ): number {
   const survival = (organism.stepsTaken * 0.4 + organism.energy * 0.3) * organism.energyEfficiency;
-  const role = organism.isCarnivore ? carnivoreScore(organism) : herbivoreScore(organism);
+  const role = herbivoreScore(organism) * plantIntake(organism.diet) + carnivoreScore(organism) * huntIntake(organism.diet);
   const centerX = width / 2;
   const centerY = height / 2;
   const distCenter = Math.hypot(organism.position![0] - centerX, organism.position![1] - centerY);
@@ -52,9 +53,6 @@ function carnivoreScore(organism: Organism): number {
   if (organism.stepsSinceLastHunt > 150) {
     role *= Math.exp(-organism.stepsSinceLastHunt / 350);
   }
-  if (organism.foodConsumed > 0) {
-    role *= 0.01;
-  }
   return role;
 }
 
@@ -72,9 +70,6 @@ function herbivoreScore(organism: Organism): number {
     organism.stepsTaken * 0.5 * organism.speed;
   if (organism.stepsSinceLastFood > 100) {
     role *= Math.exp(-organism.stepsSinceLastFood / 250);
-  }
-  if (organism.organismsConsumed > 0) {
-    role *= 0.01;
   }
   return role;
 }

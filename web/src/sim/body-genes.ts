@@ -69,6 +69,55 @@ export function isCarnivoreDiet(diet: number): boolean {
   return diet >= CARNIVORE_DIET;
 }
 
+/** Founders are clamped to this. Feeding below it matches a pure grazer. */
+export const FULL_GRAZE_DIET = 0.2;
+
+/** Share of a plant meal that still feeds. Full through the founder range, none at diet 1. */
+export function plantIntake(diet: number): number {
+  const value = clamp(diet, COLOR_MIN, COLOR_MAX);
+  if (value <= FULL_GRAZE_DIET) {
+    return 1;
+  }
+  return (1 - value) / (1 - FULL_GRAZE_DIET);
+}
+
+/** Share of a kill that still feeds. None through the founder range, full at diet 1. */
+export function huntIntake(diet: number): number {
+  const value = clamp(diet, COLOR_MIN, COLOR_MAX);
+  if (value <= FULL_GRAZE_DIET) {
+    return 0;
+  }
+  return (value - FULL_GRAZE_DIET) / (1 - FULL_GRAZE_DIET);
+}
+
+/** Bite strength after hunting has turned on. A new hunter nips; a specialist bites at full force. */
+export function huntPower(diet: number): number {
+  const hunt = huntIntake(diet);
+  if (hunt <= 0) {
+    return 0;
+  }
+  return 0.4 + 0.6 * hunt;
+}
+
+/**
+ * Prey-size gate. Just above the grazer range a hunter can take smaller bodies only.
+ * At diet 1 the gate is the old rule: the attacker may be as small as 80% of the prey.
+ */
+export function huntSizeGate(diet: number): number {
+  return 0.8 + 0.2 * (1 - huntIntake(diet));
+}
+
+/** Coarse label for the board. The middle band is the bridge where both foods still pay. */
+export function dietLabel(diet: number): "Herbivore" | "Omnivore" | "Carnivore" {
+  if (diet < 0.35) {
+    return "Herbivore";
+  }
+  if (diet < 0.7) {
+    return "Omnivore";
+  }
+  return "Carnivore";
+}
+
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value));
 }

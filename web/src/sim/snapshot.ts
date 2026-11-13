@@ -178,7 +178,18 @@ export function restoreWorld(file: SaveFile, neatText: string): LivingWorld {
   world.epoch = finite(state.epoch, 0, 0, 50_000_000);
   world.births = finite(state.births, 0, 0, 50_000_000);
   world.log = Array.isArray(state.log) ? (state.log as string[]).slice(-40).map((line) => String(line).slice(0, 240)) : [];
-  world.scores = new Map(state.scores as [string, { name: string; fitness: number; carnivore: boolean }][]);
+  const savedScores = state.scores as [string, { name: string; fitness: number; carnivore: boolean; diet?: number }][];
+  world.scores = new Map(
+    savedScores.map(([id, record]) => [
+      id,
+      {
+        name: record.name,
+        fitness: record.fitness,
+        carnivore: record.carnivore,
+        diet: typeof record.diet === "number" ? record.diet : record.carnivore ? 1 : 0,
+      },
+    ]),
+  );
   world.rng.importState(state.rng as { mt: number[]; index: number; gaussNext: number | null });
   return world;
 }

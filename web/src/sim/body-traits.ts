@@ -1,6 +1,7 @@
 /** Organs read off enabled sensor wires. */
 
 import type { Genome } from "../neat/genome";
+import { huntIntake, plantIntake } from "./body-genes";
 
 const VISIBLE = 0.25;
 const VELOCITY = new Set([0, 1]);
@@ -13,7 +14,7 @@ export class BodyTraits {
     readonly flagella: number,
   ) {}
 
-  static fromGenome(genome: Genome | null, carnivore: boolean): BodyTraits {
+  static fromGenome(genome: Genome | null, diet: number): BodyTraits {
     if (!genome) {
       return new BodyTraits(0, 0, 0, 0);
     }
@@ -33,11 +34,8 @@ export class BodyTraits {
       if (kind === "food") {
         jaw += strength;
       } else if (kind === "prey") {
-        if (carnivore) {
-          claw += strength;
-        } else {
-          horn += strength;
-        }
+        claw += strength * huntIntake(diet);
+        horn += strength * plantIntake(diet);
       } else if (kind === "core") {
         flagella += strength;
       }

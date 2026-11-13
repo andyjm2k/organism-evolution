@@ -1,5 +1,6 @@
 /** Fixed 31-channel sensor vector. Channel order matches the desktop harness. */
 
+import { huntIntake } from "./body-genes";
 import { squaredDistance } from "./distance";
 
 export const NUM_NETWORK_INPUTS = 31;
@@ -17,6 +18,7 @@ export interface SensorBody extends Sensed {
   energy: number;
   maxEnergy: number;
   isCarnivore: boolean;
+  diet: number;
   canBreed(): boolean;
 }
 
@@ -59,14 +61,11 @@ export function buildNetworkInputs(
     width ? Math.min(x / width, (width - x) / width) : 0,
     height ? Math.min(y / height, (height - y) / height) : 0,
   ];
-  if (organism.isCarnivore) {
-    inputs.push(0, 1, 0, 0, ...EMPTY_SECOND);
-  } else {
-    const [foodNear, foodSecond] = closestEntities(organism, nearbyFood, environment.foodDetectionRadius, true);
-    inputs.push(...foodNear, ...foodSecond);
-  }
-  if (organism.isCarnivore) {
-    const prey = nearbyOrganisms.filter((other) => !other.isCarnivore);
+  // Plant direction stays live at every diet, so a chase-plant brain still feeds a body that has started to hunt.
+  const [foodNear, foodSecond] = closestEntities(organism, nearbyFood, environment.foodDetectionRadius, true);
+  inputs.push(...foodNear, ...foodSecond);
+  if (huntIntake(organism.diet) > 0) {
+    const prey = nearbyOrganisms.filter((other) => other.diet < organism.diet);
     const [preyNear, preySecond] = closestEntities(organism, prey, environment.detectionRadius, false);
     inputs.push(...preyNear, ...preySecond);
   } else {

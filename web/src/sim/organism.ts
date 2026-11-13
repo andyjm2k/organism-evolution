@@ -4,7 +4,7 @@ import type { PythonRandom } from "../rng/python-random";
 import { Genome } from "../neat/genome";
 import type { GenomeConfig } from "../neat/config";
 import { CompiledNetwork } from "../neat/network";
-import { geneColor, isCarnivoreDiet } from "./body-genes";
+import { geneColor, huntIntake, isCarnivoreDiet } from "./body-genes";
 import { buildNetworkInputs } from "./network-inputs";
 import { withinRadius } from "./distance";
 import { calculateFitness } from "./fitness";
@@ -57,6 +57,7 @@ export class Organism {
   movementTrail: [number, number][] = [];
   carriedEgg: Egg | null = null;
   isCarnivore: boolean;
+  diet: number;
   dietKey: number;
   nodeCount = 0;
   connectionCount = 0;
@@ -95,10 +96,10 @@ export class Organism {
     this.lastPosition = [position[0], position[1]];
     this.speciesId = speciesId;
     this.dietKey = dietKey ?? speciesId ?? 1;
-    this.isCarnivore = dietFromKey(this.dietKey);
     const genes = genome.bodyGenes;
+    this.diet = genes ? genes.diet : dietFromKey(this.dietKey) ? 1 : 0;
+    this.isCarnivore = isCarnivoreDiet(this.diet);
     if (genes) {
-      this.isCarnivore = isCarnivoreDiet(genes.diet);
       this.dietKey = this.isCarnivore ? 3 : 1;
     }
     this.recomputeAttributes();
@@ -197,7 +198,7 @@ export class Organism {
     }
     this.applyBoundary();
     graze(this, food);
-    if (this.isCarnivore) {
+    if (huntIntake(this.diet) > 0) {
       huntPrey(this, organisms);
     }
   }
@@ -263,10 +264,11 @@ export class Organism {
     this.nodeCount = this.genome.nodes.size;
     this.connectionCount = this.genome.connections.size;
     this.hiddenCount = [...this.genome.nodes.keys()].filter((key) => key > 0).length;
-    const baseSpeed = this.isCarnivore ? 1.2 : 1.3;
-    const baseSize = this.isCarnivore ? 1.1 : 1;
-    const baseEnergy = this.isCarnivore ? 300 : 250;
-    const baseEfficiency = this.isCarnivore ? 1.5 : 1.8;
+    const hunt = huntIntake(this.diet);
+    const baseSpeed = 1.3 + (1.2 - 1.3) * hunt;
+    const baseSize = 1 + (1.1 - 1) * hunt;
+    const baseEnergy = 250 + (300 - 250) * hunt;
+    const baseEfficiency = 1.8 + (1.5 - 1.8) * hunt;
     this.speed = baseSpeed * Math.min(4, Math.max(0.25, 0.25 + this.nodeCount / 10));
     this.size = baseSize * Math.min(4, Math.max(0.25, 0.25 + this.connectionCount / 10));
     const genes = this.genome.bodyGenes;

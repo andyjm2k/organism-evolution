@@ -13,6 +13,7 @@ import { assignSpecies, SelectionScheduler, type SpeciesBand } from "./selection
 import { bootstrapPopulation, type GenesisConfig } from "./bootstrap";
 import { scientificName } from "./names";
 import type { Egg } from "./egg";
+import { huntIntake } from "./body-genes";
 import { BodyTraits } from "./body-traits";
 import type { Genome } from "../neat/genome";
 
@@ -61,7 +62,7 @@ export interface WorldSnapshot {
   foods: { x: number; y: number; color: [number, number, number]; regrowing: boolean }[];
   eggs: { x: number; y: number }[];
   clouds: { x: number; y: number; radius: number; intensity: number }[];
-  scoreboard: { id: string; name: string; fitness: number; carnivore: boolean }[];
+  scoreboard: { id: string; name: string; fitness: number; carnivore: boolean; diet: number }[];
   log: string[];
   worldWidth: number;
   worldHeight: number;
@@ -71,6 +72,7 @@ interface ScoreRecord {
   name: string;
   fitness: number;
   carnivore: boolean;
+  diet: number;
 }
 
 export class LivingWorld {
@@ -291,7 +293,13 @@ export class LivingWorld {
       scoreboard: [...this.scores.entries()]
         .sort((a, b) => b[1].fitness - a[1].fitness)
         .slice(0, 8)
-        .map(([id, record]) => ({ id, name: record.name, fitness: record.fitness, carnivore: record.carnivore })),
+        .map(([id, record]) => ({
+          id,
+          name: record.name,
+          fitness: record.fitness,
+          carnivore: record.carnivore,
+          diet: record.diet,
+        })),
       log: this.log.slice(-8),
       worldWidth: this.environment.width,
       worldHeight: this.environment.height,
@@ -326,7 +334,7 @@ export class LivingWorld {
       if (other === organism || !other.position) {
         continue;
       }
-      if (other.isCarnivore && !organism.isCarnivore) {
+      if (huntIntake(other.diet) > huntIntake(organism.diet) && other.size >= organism.size * 0.8) {
         if (withinRadius(organism.position!, other.position, this.environment.threatDetectionRadius)) {
           threats.push(other);
         }
@@ -367,17 +375,19 @@ export class LivingWorld {
       name: existing?.name ?? scientificName(this.rng),
       fitness: best.highestFitness,
       carnivore: best.isCarnivore,
+      diet: best.diet,
     };
     if (!existing || best.highestFitness > existing.fitness) {
       this.scores.set(id, record);
     } else {
       existing.carnivore = best.isCarnivore;
+      existing.diet = best.diet;
     }
   }
 }
 
 function bodySnapshot(organism: Organism): BodySnapshot {
-  const traits = BodyTraits.fromGenome(organism.genome, organism.isCarnivore);
+  const traits = BodyTraits.fromGenome(organism.genome, organism.diet);
   return {
     id: organism.genomeId,
     x: organism.position![0],

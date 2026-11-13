@@ -1,6 +1,7 @@
 /** Nutrient clouds, pellets, and the bites that change a strain. */
 
 import type { PythonRandom } from "../rng/python-random";
+import { plantIntake } from "./body-genes";
 import { colliding } from "./distance";
 import { makeFounderStrain, PlantStrain } from "./plant";
 import type { Organism } from "./organism";
@@ -347,12 +348,16 @@ export class FoodEcology {
   }
 }
 
-/** One herbivore bite of the first pellet it is touching. */
+/** One bite of the first ripe pellet. Plant calories fall as diet rises, and stop at diet 1. */
 export function graze(organism: Organism, foodItems: Food[]): void {
-  if (organism.energy <= 0 || organism.isCarnivore || !organism.position) {
+  if (organism.energy <= 0 || !organism.position) {
     return;
   }
-  const foodEnergy = organism.environment.foodEnergyValue;
+  const intake = plantIntake(organism.diet);
+  if (intake <= 0) {
+    return;
+  }
+  const foodEnergy = organism.environment.foodEnergyValue * intake;
   for (const food of foodItems) {
     if (!food.position || food.regrowIn > 0) {
       continue;
