@@ -21,6 +21,7 @@
           <button type="button" id="save">Save</button>
           <button type="button" id="load">Load</button>
           <button type="button" id="settings">Settings</button>
+          <button type="button" id="anatomy-open">Anatomy</button>
           <button type="button" id="species-toggle">Species</button>
         </div>
         <aside id="panel" hidden></aside>
@@ -48,6 +49,17 @@
         <menu>
           <button type="submit" value="cancel">Cancel</button>
           <button type="submit" value="restart" id="restart">Restart</button>
+        </menu>
+      </form>
+    </dialog>
+    <dialog id="anatomy-dialog">
+      <form method="dialog">
+        <h2>Anatomy</h2>
+        <p>Each organ is drawn on the body. Growing one helps a job and costs another.</p>
+        <canvas id="anatomy" width="880" height="220"></canvas>
+        <div id="anatomy-notes"></div>
+        <menu>
+          <button type="submit" value="cancel">Close</button>
         </menu>
       </form>
     </dialog>

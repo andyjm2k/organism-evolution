@@ -15,6 +15,7 @@ import { scientificName } from "./names";
 import type { Egg } from "./egg";
 import { huntIntake } from "./body-genes";
 import { BodyTraits } from "./body-traits";
+import { neighborQueryRadius, senseRadius, type PartLevels } from "./morphology";
 import type { Genome } from "../neat/genome";
 
 export interface SimConfig {
@@ -46,6 +47,8 @@ export interface BodySnapshot {
   nodes: number;
   connections: number;
   maturity: number;
+  heading: number;
+  parts: PartLevels;
   edges: { from: number; to: number; weight: number }[];
 }
 
@@ -326,8 +329,10 @@ export class LivingWorld {
   }
 
   private nearby(organism: Organism): [Food[], Organism[], Organism[], Organism[]] {
-    const food = this.foodGrid.query(organism.position!, this.environment.foodDetectionRadius);
-    const others = this.orgGrid.query(organism.position!, this.environment.detectionRadius);
+    const stats = organism.morph;
+    const foodReach = senseRadius(this.environment.foodDetectionRadius, stats.foodSense, stats.vision);
+    const food = this.foodGrid.query(organism.position!, foodReach);
+    const others = this.orgGrid.query(organism.position!, neighborQueryRadius(this.environment, stats));
     const threats: Organism[] = [];
     const partners: Organism[] = [];
     for (const other of others) {
@@ -335,11 +340,13 @@ export class LivingWorld {
         continue;
       }
       if (huntIntake(other.diet) > huntIntake(organism.diet) && other.size >= organism.size * 0.8) {
-        if (withinRadius(organism.position!, other.position, this.environment.threatDetectionRadius)) {
+        const reach = senseRadius(this.environment.threatDetectionRadius, stats.threatSense, stats.vision) * other.morph.signature;
+        if (withinRadius(organism.position!, other.position, reach)) {
           threats.push(other);
         }
       } else if (other.speciesId === organism.speciesId) {
-        if (withinRadius(organism.position!, other.position, this.environment.breedingDetectionRadius)) {
+        const reach = senseRadius(this.environment.breedingDetectionRadius, stats.breedSense, stats.vision) * other.morph.signature;
+        if (withinRadius(organism.position!, other.position, reach)) {
           partners.push(other);
         }
       }
@@ -413,6 +420,8 @@ function bodySnapshot(organism: Organism): BodySnapshot {
     nodes: organism.nodeCount,
     connections: organism.connectionCount,
     maturity: organism.maturity,
+    heading: organism.heading,
+    parts: organism.parts,
     edges: [...organism.genome.connections.values()]
       .filter((connection) => connection.enabled)
       .map((connection) => ({ from: connection.inNode, to: connection.outNode, weight: connection.weight })),

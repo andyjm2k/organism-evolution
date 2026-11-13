@@ -5,6 +5,7 @@ import { Genome } from "../neat/genome";
 import type { GenomeConfig } from "../neat/config";
 import { CompiledNetwork } from "../neat/network";
 import { geneColor, huntIntake, isCarnivoreDiet } from "./body-genes";
+import { absorbLight, founderParts, morphStats, readParts, sensedRadii, type MorphStats, type PartLevels } from "./morphology";
 import { buildNetworkInputs } from "./network-inputs";
 import { withinRadius } from "./distance";
 import { calculateFitness } from "./fitness";
@@ -79,6 +80,9 @@ export class Organism {
   healthBound = false;
   genomeId = 0;
   parentIds: [number | null, number | null] | null = null;
+  heading = 0;
+  parts: PartLevels = founderParts();
+  morph: MorphStats = morphStats(founderParts());
   private startingEnergy = 1;
 
   constructor(
@@ -96,6 +100,7 @@ export class Organism {
     this.lastPosition = [position[0], position[1]];
     this.speciesId = speciesId;
     this.dietKey = dietKey ?? speciesId ?? 1;
+    this.heading = Math.atan2(position[1] - environment.height / 2, position[0] - environment.width / 2);
     const genes = genome.bodyGenes;
     this.diet = genes ? genes.diet : dietFromKey(this.dietKey) ? 1 : 0;
     this.isCarnivore = isCarnivoreDiet(this.diet);
@@ -147,7 +152,8 @@ export class Organism {
       return;
     }
     this.lastPosition = [this.position[0], this.position[1]];
-    const inputs = buildNetworkInputs(this, nearbyFood, nearbyOrganisms, threats, partners, this.environment);
+    const sensed = { ...this.environment, ...sensedRadii(this.environment, this.morph) };
+    const inputs = buildNetworkInputs(this, nearbyFood, nearbyOrganisms, threats, partners, sensed);
     const output = this.network.activate(inputs);
     const vx = output[0];
     const vy = output[1];
@@ -162,6 +168,7 @@ export class Organism {
     const newX = Math.max(0, Math.min(this.position[0] + moveX, this.environment.width));
     const newY = Math.max(0, Math.min(this.position[1] + moveY, this.environment.height));
     if (moveX !== 0 || moveY !== 0) {
+      this.heading = Math.atan2(moveY, moveX);
       this.position = [newX, newY];
       this.wasMoving = true;
       this.pushTrail(this.position);
@@ -186,7 +193,10 @@ export class Organism {
       return;
     }
     this.fitnessBonus += 0.05;
-    this.energy -= 0.01 * this.size;
+    this.energy -= 0.01 * this.size * this.morph.metabolism;
+    if (this.morph.photo > 0 && this.world) {
+      this.energy = absorbLight(this.energy, this.maxEnergy, this.position, this.world.ecology.clouds, this.morph.photo * this.size);
+    }
     growStep(this);
     if (this.health <= 0) {
       this.energy = 0;
@@ -272,16 +282,20 @@ export class Organism {
     this.speed = baseSpeed * Math.min(4, Math.max(0.25, 0.25 + this.nodeCount / 10));
     this.size = baseSize * Math.min(4, Math.max(0.25, 0.25 + this.connectionCount / 10));
     const genes = this.genome.bodyGenes;
+    this.parts = readParts(genes);
+    this.morph = morphStats(this.parts);
     if (genes) {
       this.size *= genes.size;
       this.baseRadiusScale = genes.size;
     } else {
       this.baseRadiusScale = 1;
     }
+    this.speed *= this.morph.speed;
     this.maxEnergy = baseEnergy * this.size * 3;
     this.startingEnergy = Math.min(this.environment.startingEnergy, this.maxEnergy);
     this.energyEfficiency = baseEfficiency * (2 - this.size * 0.1);
     this.movementEnergyCost = this.environment.movementCost * this.speed ** 1.1 * this.size ** 0.5;
+    this.movementEnergyCost *= this.morph.moveCost;
     this.baseRadius = (4 + Math.min(8, this.nodeCount / 10)) * this.baseRadiusScale;
     bindAdultBody(this);
   }

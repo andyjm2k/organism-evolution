@@ -357,7 +357,7 @@ export function graze(organism: Organism, foodItems: Food[]): void {
   if (intake <= 0) {
     return;
   }
-  const foodEnergy = organism.environment.foodEnergyValue * intake;
+  const foodEnergy = organism.environment.foodEnergyValue * intake * (organism.morph?.siphon ?? 1);
   for (const food of foodItems) {
     if (!food.position || food.regrowIn > 0) {
       continue;

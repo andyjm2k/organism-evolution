@@ -2,6 +2,7 @@
 
 import type { PythonRandom } from "../rng/python-random";
 import type { GenomeConfig } from "./config";
+import type { PartLevels } from "../sim/morphology";
 
 export interface NodeGene {
   key: number;
@@ -233,6 +234,8 @@ export interface BodyGeneState {
   blue: number;
   diet: number;
   size: number;
+  /** Organ sizes. Absent on older saves, which read as the founding body. */
+  parts?: Partial<PartLevels>;
 }
 
 export function connKey(inNode: number, outNode: number): string {

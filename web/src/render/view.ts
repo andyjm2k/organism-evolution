@@ -1,9 +1,11 @@
-/** World drawing. WebGL2 discs when the context exists, Canvas 2D otherwise and for organs. */
+/** World drawing. Lit creature meshes when WebGL2 exists, Canvas parts otherwise. */
 
 import type { Camera } from "./camera";
 import type { BodySnapshot, WorldSnapshot } from "../sim/world";
 import { plantIntake } from "../sim/body-genes";
-import { VISIBLE_STRENGTH } from "../sim/body-traits";
+import { paintCreature2d } from "./creature-draw2d";
+import { CreaturePass } from "./creature-gl";
+import { visualRadius, type CreaturePose } from "./creature-layout";
 
 export interface ViewOptions {
   showRings: boolean;
@@ -20,7 +22,7 @@ export class WorldView {
   private buffer: WebGLBuffer | null = null;
   private instance: WebGLBuffer | null = null;
   private vao: WebGLVertexArrayObject | null = null;
-  private capacity = 0;
+  private creatures: CreaturePass | null = null;
   mode: "webgl2" | "canvas" = "canvas";
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -34,6 +36,12 @@ export class WorldView {
         this.instance = gl.createBuffer();
         this.vao = gl.createVertexArray();
         this.bindQuad(gl);
+        try {
+          this.creatures = new CreaturePass(gl);
+        } catch (error) {
+          console.error(error);
+          this.creatures = null;
+        }
         return;
       }
     } catch {
@@ -83,7 +91,7 @@ export class WorldView {
     for (const body of snapshot.bodies) {
       const dx = world[0] - body.x;
       const dy = world[1] - body.y;
-      const hit = Math.max(12, body.radius + 8);
+      const hit = Math.max(visualRadius(body.radius) * 1.7, body.radius + 8);
       const dist = dx * dx + dy * dy;
       if (dist <= hit * hit && dist < bestDist) {
         best = body.id;
@@ -96,8 +104,9 @@ export class WorldView {
   private drawGl(snapshot: WorldSnapshot, camera: Camera, options: ViewOptions, width: number, height: number): void {
     const gl = this.gl!;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(18 / 255, 22 / 255, 28 / 255, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.disable(gl.DEPTH_TEST);
+    gl.clearColor(0.047, 0.086, 0.11, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     const circles: number[] = [];
@@ -115,20 +124,23 @@ export class WorldView {
     for (const egg of snapshot.eggs) {
       push(egg.x, egg.y, 4, [230, 210, 160], 1);
     }
-    for (const body of snapshot.bodies.slice(0, 800)) {
-      const [sx, sy] = camera.worldToScreen(body.x, body.y);
-      if (sx < -40 || sy < -40 || sx > width + 40 || sy > height + 40) {
-        continue;
+    if (!this.creatures) {
+      for (const body of snapshot.bodies.slice(0, 800)) {
+        const [sx, sy] = camera.worldToScreen(body.x, body.y);
+        if (sx < -40 || sy < -40 || sx > width + 40 || sy > height + 40) {
+          continue;
+        }
+        const radius = Math.max(6, Math.min(16, Math.trunc(body.radius) + 2));
+        push(body.x, body.y, radius, body.color, 1);
       }
-      const radius = Math.max(6, Math.min(16, Math.trunc(body.radius) + 2));
-      push(body.x, body.y, radius, body.color, 1);
     }
     this.flushCircles(gl, circles, camera, width, height);
+    this.creatures?.draw(snapshot.bodies, options.selectedId, camera, width, height, performance.now() / 1000);
     const overlay = this.overlay();
     const ratio = this.canvas.width / Math.max(1, width);
     overlay.setTransform(ratio, 0, 0, ratio, 0, 0);
     overlay.clearRect(0, 0, width, height);
-    drawOrgansAndChrome(overlay, snapshot, camera, width, height, options);
+    drawOrgansAndChrome(overlay, snapshot, camera, width, height, options, this.creatures === null);
   }
 
   private overlayContext: CanvasRenderingContext2D | null = null;
@@ -181,16 +193,15 @@ export class WorldView {
     gl.useProgram(program);
     gl.bindVertexArray(this.vao);
     const data = new Float32Array(circles);
-    if (circles.length / 7 > this.capacity) {
-      this.capacity = Math.max(256, circles.length / 7);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.instance);
-      gl.bufferData(gl.ARRAY_BUFFER, data.byteLength, gl.DYNAMIC_DRAW);
-    }
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instance);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
+    // Replace the whole buffer. A short allocation plus bufferSubData draws past the end once food count grows.
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
     gl.uniform2f(gl.getUniformLocation(program, "u_view"), width, height);
     gl.uniform2f(gl.getUniformLocation(program, "u_camera"), camera.offsetX, camera.offsetY);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, circles.length / 7);
+    if (data.length === 0) {
+      return;
+    }
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, data.length / 7);
   }
 }
 
@@ -202,7 +213,7 @@ function drawScene(
   width: number,
   height: number,
 ): void {
-  ctx.fillStyle = "#12161c";
+  ctx.fillStyle = "#0c161c";
   ctx.fillRect(0, 0, width, height);
   for (const cloud of snapshot.clouds) {
     const [sx, sy] = camera.worldToScreen(cloud.x, cloud.y);
@@ -226,7 +237,7 @@ function drawScene(
     ctx.arc(sx, sy, food.regrowing ? 2 : 3, 0, Math.PI * 2);
     ctx.fill();
   }
-  drawOrgansAndChrome(ctx, snapshot, camera, width, height, options);
+  drawOrgansAndChrome(ctx, snapshot, camera, width, height, options, true);
 }
 
 function drawOrgansAndChrome(
@@ -236,19 +247,22 @@ function drawOrgansAndChrome(
   width: number,
   height: number,
   options?: ViewOptions,
+  flatBodies = true,
 ): void {
   for (const body of snapshot.bodies.slice(0, 800)) {
     drawTrail(ctx, body, camera);
   }
-  for (const egg of snapshot.eggs) {
-    const [sx, sy] = camera.worldToScreen(egg.x, egg.y);
-    ctx.beginPath();
-    ctx.fillStyle = "rgb(245,236,214)";
-    ctx.strokeStyle = "rgb(90,70,40)";
-    ctx.lineWidth = 1;
-    ctx.arc(sx, sy, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+  if (flatBodies) {
+    for (const egg of snapshot.eggs) {
+      const [sx, sy] = camera.worldToScreen(egg.x, egg.y);
+      ctx.beginPath();
+      ctx.fillStyle = "rgb(245,236,214)";
+      ctx.strokeStyle = "rgb(90,70,40)";
+      ctx.lineWidth = 1;
+      ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
   const selected = snapshot.bodies.find((body) => options && body.id === options.selectedId);
   if (selected && options?.showRings) {
@@ -256,15 +270,17 @@ function drawOrgansAndChrome(
   }
   for (const body of snapshot.bodies.slice(0, 800)) {
     const [sx, sy] = camera.worldToScreen(body.x, body.y);
-    if (sx < -40 || sy < -40 || sx > width + 40 || sy > height + 40) {
+    if (sx < -80 || sy < -80 || sx > width + 80 || sy > height + 80) {
       continue;
     }
-    drawBody(ctx, sx, sy, body);
+    if (flatBodies) {
+      drawBody(ctx, sx, sy, body);
+    }
     if (options && body.id === options.selectedId) {
       ctx.beginPath();
       ctx.strokeStyle = "rgb(255,210,60)";
       ctx.lineWidth = 2;
-      ctx.arc(sx, sy, Math.max(6, Math.min(16, Math.trunc(body.radius) + 2)) + 8, 0, Math.PI * 2);
+      ctx.arc(sx, sy, visualRadius(body.radius) * 1.85, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
@@ -309,54 +325,16 @@ function drawRings(ctx: CanvasRenderingContext2D, body: BodySnapshot, camera: Ca
 }
 
 function drawBody(ctx: CanvasRenderingContext2D, x: number, y: number, body: BodySnapshot): void {
-  const radius = Math.max(6, Math.min(16, Math.trunc(body.radius) + 2));
-  if (body.flagella >= VISIBLE_STRENGTH) {
-    const length = radius + Math.min(18, Math.trunc(body.flagella * 2));
-    ctx.strokeStyle = tint(body.color, [140, 220, 180], 0.55);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x - radius + 1, y);
-    for (let index = 1; index <= 3; index += 1) {
-      const along = radius + ((length - radius) * index) / 3;
-      const wave = 3 * Math.sin(index * 1.4) * (index % 2 ? 1 : -1);
-      ctx.lineTo(x - along, y + wave);
-    }
-    ctx.stroke();
-  }
-  ctx.beginPath();
-  ctx.fillStyle = `rgb(${body.color[0]},${body.color[1]},${body.color[2]})`;
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
-  if (body.jaw >= VISIBLE_STRENGTH) {
-    const length = radius + Math.min(18, Math.trunc(body.jaw * 2));
-    ctx.fillStyle = tint(body.color, [240, 190, 120], 0.55);
-    ctx.beginPath();
-    ctx.moveTo(x + radius - 1, y - Math.max(3, radius / 2));
-    ctx.lineTo(x + length, y);
-    ctx.lineTo(x + radius - 1, y + Math.max(3, radius / 2));
-    ctx.fill();
-  }
-  if (body.horn >= VISIBLE_STRENGTH) {
-    const length = radius + Math.min(18, Math.trunc(body.horn * 2));
-    ctx.fillStyle = tint(body.color, [245, 245, 230], 0.65);
-    ctx.beginPath();
-    ctx.moveTo(x - 3, y - radius + 1);
-    ctx.lineTo(x + 3, y - radius + 1);
-    ctx.lineTo(x, y - length);
-    ctx.fill();
-  }
-  if (body.claw >= VISIBLE_STRENGTH) {
-    const length = radius + Math.min(18, Math.trunc(body.claw * 2));
-    ctx.strokeStyle = tint(body.color, [230, 170, 130], 0.5);
-    ctx.lineWidth = 2;
-    const spread = Math.max(3, radius / 2);
-    for (const sign of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(x + radius - 2, y + sign * spread);
-      ctx.lineTo(x + length, y + sign * (spread + 3));
-      ctx.stroke();
-    }
-  }
+  const pose: CreaturePose = {
+    color: body.color,
+    parts: body.parts,
+    jaw: body.jaw,
+    claw: body.claw,
+    horn: body.horn,
+    flagella: body.flagella,
+    selected: false,
+  };
+  paintCreature2d(ctx, x, y, visualRadius(body.radius), body.heading, pose);
 }
 
 export function minimapRect(width: number): { x: number; y: number; size: number } {
@@ -396,11 +374,6 @@ function drawMinimap(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, cam
   ctx.fillStyle = "#b4bec8";
   ctx.font = "12px sans-serif";
   ctx.fillText("Map", x + 6, y + size - 8);
-}
-
-function tint(color: [number, number, number], toward: number[], amount: number): string {
-  const mixed = color.map((channel, index) => Math.max(0, Math.min(255, Math.trunc(channel * (1 - amount) + toward[index] * amount))));
-  return `rgb(${mixed[0]},${mixed[1]},${mixed[2]})`;
 }
 
 function buildProgram(gl: WebGL2RenderingContext): WebGLProgram {

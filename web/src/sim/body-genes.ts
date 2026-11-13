@@ -2,6 +2,7 @@
 
 import type { PythonRandom } from "../rng/python-random";
 import type { BodyGeneState } from "../neat/genome";
+import { founderParts, mutateParts, readParts } from "./morphology";
 
 const COLOR_MIN = 0;
 const COLOR_MAX = 1;
@@ -15,7 +16,7 @@ const FOUNDER_BLUE = 0.28;
 const FOUNDER_DIET = 0.08;
 
 export function copyGenes(genes: BodyGeneState): BodyGeneState {
-  return { ...genes };
+  return { ...genes, parts: genes.parts ? { ...genes.parts } : undefined };
 }
 
 /** Nudge every gene by a gaussian and clamp it. */
@@ -38,6 +39,8 @@ export function makeFounderGenes(rng: PythonRandom): BodyGeneState {
   );
   genes.diet = Math.min(0.2, Math.max(0, genes.diet));
   genes.size = 1;
+  // Set after the color nudge so founding organs do not consume the world RNG.
+  genes.parts = founderParts();
   return genes;
 }
 
@@ -53,6 +56,7 @@ export function inheritBodyGenes(
     return null;
   }
   const childGenes = mutateGenes(copyGenes(source), rng);
+  childGenes.parts = mutateParts(readParts(childGenes), rng);
   child.bodyGenes = childGenes;
   return childGenes;
 }

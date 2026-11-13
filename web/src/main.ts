@@ -3,6 +3,8 @@
 import { Camera } from "./render/camera";
 import { minimapRect, WorldView } from "./render/view";
 import { dietLabel } from "./sim/body-genes";
+import { anatomyReport } from "./sim/morphology";
+import { mountAnatomyBoard } from "./render/anatomy-board";
 import type { SimConfig, WorldSnapshot } from "./sim/world";
 
 const app = document.querySelector("#app") as HTMLElement;
@@ -268,7 +270,7 @@ function renderPanel(): void {
     `Fitness ${Math.round(body.fitness)}`,
     `Genome ${body.id}`,
     `Size ${body.size.toFixed(2)} | Speed ${body.speed.toFixed(2)}`,
-    organLine(body),
+    ...anatomyLines(body),
   ];
   for (const line of lines) {
     const paragraph = document.createElement("p");
@@ -276,6 +278,11 @@ function renderPanel(): void {
     panel.appendChild(paragraph);
   }
   panel.appendChild(genomeGraph(body));
+}
+
+function anatomyLines(body: WorldSnapshot["bodies"][number]): string[] {
+  const report = anatomyReport(body.parts, body);
+  return [report.summary, ...report.trades, organLine(body)];
 }
 
 function organLine(body: NonNullable<WorldSnapshot["bodies"][number]>): string {
@@ -286,9 +293,9 @@ function organLine(body: NonNullable<WorldSnapshot["bodies"][number]>): string {
     ["Flagella", body.flagella],
   ].filter(([, strength]) => Number(strength) >= 0.25);
   if (parts.length === 0) {
-    return "Body: plain cell";
+    return "Nerves: unspecialized";
   }
-  return `Body: ${parts.map(([label, strength]) => `${label} ${Number(strength).toFixed(1)}`).join(" | ")}`;
+  return `Nerves: ${parts.map(([label, strength]) => `${label} ${Number(strength).toFixed(1)}`).join(" | ")}`;
 }
 
 function genomeGraph(body: WorldSnapshot["bodies"][number]): SVGSVGElement {
@@ -332,6 +339,11 @@ function genomeGraph(body: WorldSnapshot["bodies"][number]): SVGSVGElement {
   }
   return svg;
 }
+
+mountAnatomyBoard(
+  document.querySelector("#anatomy-open") as HTMLButtonElement,
+  document.querySelector("#anatomy-dialog") as HTMLDialogElement,
+);
 
 function localPoint(event: PointerEvent): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();

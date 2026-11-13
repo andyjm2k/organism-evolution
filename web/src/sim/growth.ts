@@ -5,7 +5,8 @@ import type { Organism } from "./organism";
 export function bindAdultBody(organism: Organism): void {
   organism.adultSize = organism.size;
   organism.adultMaxEnergy = organism.maxEnergy;
-  organism.adultMaxHealth = 90 * Math.max(organism.adultSize, 0.25);
+  const armor = organism.morph?.armor ?? 0;
+  organism.adultMaxHealth = 90 * Math.max(organism.adultSize, 0.25) * (1 + armor * 0.8);
   const firstBody = !organism.healthBound;
   applyMaturity(organism);
   if (firstBody) {

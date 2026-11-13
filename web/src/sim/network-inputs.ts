@@ -8,6 +8,8 @@ const EMPTY_SECOND: [number, number, number] = [1, 0, 0];
 
 interface Sensed {
   position: [number, number] | null;
+  /** How easy this body is to notice. Food has none and stays at 1. */
+  morph?: { signature: number };
 }
 
 /** Fields the sensor builder reads. Kept here so organism.ts can import this module. */
@@ -99,15 +101,20 @@ function closestEntities(
   return [nearestBlock, pack(organism, ranked[1].entity, ranked[1].distSq, radius, unitDirection)];
 }
 
+function signatureOf(entity: Sensed): number {
+  const signature = entity.morph?.signature;
+  return typeof signature === "number" && signature > 0 ? signature : 1;
+}
+
 function entitiesInRadius(organism: SensorBody, entities: Sensed[], radius: number): { distSq: number; entity: Sensed }[] {
-  const radiusSq = radius > 0 ? radius * radius : 0;
   const ranked: { distSq: number; entity: Sensed }[] = [];
   for (const entity of entities) {
     if (!entity.position || !organism.position) {
       continue;
     }
     const distSq = squaredDistance(organism.position, entity.position);
-    if (distSq <= radiusSq) {
+    const reach = radius * signatureOf(entity);
+    if (distSq <= reach * reach) {
       ranked.push({ distSq, entity });
     }
   }
@@ -122,11 +129,12 @@ function pack(
   radius: number,
   unitDirection: boolean,
 ): [number, number, number] {
+  const noticed = radius * signatureOf(entity);
   const best = Math.sqrt(distSq);
-  const distNorm = Math.min(1, best / Math.max(radius, 1));
+  const distNorm = Math.min(1, best / Math.max(noticed, 1));
   const dx = entity.position![0] - organism.position![0];
   const dy = entity.position![1] - organism.position![1];
-  const scale = unitDirection ? best : radius;
+  const scale = unitDirection ? best : noticed;
   if (scale <= 0) {
     return [distNorm, 0, 0];
   }
