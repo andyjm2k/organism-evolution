@@ -124,7 +124,25 @@ button, #settings-dialog button {
 }
 #settings-dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; }
 
+#anatomy-dialog {
+  background: #151b24;
+  color: inherit;
+  border: 1px solid #3c4c60;
+  border-radius: 8px;
+  width: min(960px, calc(100% - 24px));
+}
+
+#anatomy-dialog form { display: grid; gap: 10px; }
+#anatomy-dialog h2 { margin: 0; font-size: 18px; }
+#anatomy-dialog > form > p { margin: 0; color: #b4bec8; }
+#anatomy { width: 100%; height: 220px; background: #0c161c; border-radius: 8px; display: block; }
+#anatomy-notes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+#anatomy-notes h3 { margin: 0 0 4px; font-size: 13px; }
+#anatomy-notes p { margin: 0; font-size: 12px; color: #b4bec8; }
+#anatomy-dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; }
+
 @media (max-width: 800px) {
+  #anatomy-notes { grid-template-columns: 1fr; }
   #status { display: none; }
   #app { grid-template-columns: 1fr; }
   #board {

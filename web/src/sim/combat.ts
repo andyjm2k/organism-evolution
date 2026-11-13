@@ -7,14 +7,25 @@ import type { Organism } from "./organism";
 
 export function biteDamage(attacker: Organism, defender: Organism): number {
   const traits = BodyTraits.fromGenome(attacker.genome, attacker.diet);
-  const weapon = Math.max(traits.claw, traits.jaw * 0.5, 0.8);
+  const weapon = Math.max(traits.claw, traits.jaw * 0.5, 0.8) + (attacker.morph?.weapon ?? 0);
   const scale = attacker.size / Math.max(defender.size, 0.15);
-  return 18 * weapon * scale * huntPower(attacker.diet);
+  const hunt = huntPower(attacker.diet) * (attacker.morph?.huntScale ?? 1);
+  const armor = Math.min(0.62, defender.morph?.armor ?? 0);
+  // Venom is added after armor, so a gland still pays against a shell.
+  return 18 * weapon * scale * hunt * (1 - armor) + (attacker.morph?.venom ?? 0) * scale;
 }
 
 export function applyBite(attacker: Organism, defender: Organism): boolean {
   const damage = biteDamage(attacker, defender);
   defender.health -= damage;
+  const spine = defender.morph?.spine ?? 0;
+  if (spine > 0) {
+    attacker.health -= damage * spine;
+    if (attacker.health <= 0) {
+      attacker.health = 0;
+      attacker.energy = 0;
+    }
+  }
   if (defender.health > 0) {
     return false;
   }
