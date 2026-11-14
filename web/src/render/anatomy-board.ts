@@ -114,7 +114,7 @@ function paintBoard(
     canvas.width = bufferWidth;
     canvas.height = bufferHeight;
   }
-  const bodies = samples.map((sample, index) => fakeBody(sample, (width * (index + 0.5)) / samples.length, height * 0.46, index + 1));
+  const bodies = samples.map((sample, index) => fakeBody(sample, (width * (index + 0.5)) / samples.length, height * 0.48, index + 1));
   if (gl && pass) {
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0.047, 0.086, 0.11, 1);
@@ -140,7 +140,7 @@ function fakeBody(sample: Sample, x: number, y: number, id: number): BodySnapsho
     id,
     x,
     y,
-    radius: 20,
+    radius: 26,
     energy: 1,
     maxEnergy: 1,
     color: sample.color,

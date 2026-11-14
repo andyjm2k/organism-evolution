@@ -34,19 +34,54 @@ function paintPart(ctx: CanvasRenderingContext2D, piece: CreaturePart, radius: n
     ctx.globalAlpha = 1;
   }
   ctx.fillStyle = fill;
+  const sx = Math.max(0.6, piece.sx * radius);
+  const sy = Math.max(0.6, piece.sy * radius);
   ctx.beginPath();
   if (piece.mesh === "cone") {
-    const length = piece.sx * radius;
-    const half = Math.max(1, piece.sy * radius);
-    ctx.moveTo(length, 0);
-    ctx.lineTo(-length, half);
-    ctx.lineTo(-length, -half);
+    ctx.moveTo(sx, 0);
+    ctx.lineTo(-sx, sy);
+    ctx.lineTo(-sx, -sy);
     ctx.closePath();
-  } else if (piece.mesh === "box") {
-    ctx.rect(-piece.sx * radius, -piece.sy * radius, piece.sx * radius * 2, piece.sy * radius * 2);
+    ctx.fill();
+  } else if (piece.mesh === "fin") {
+    ctx.moveTo(sx * 0.2, 0);
+    ctx.lineTo(-sx * 0.2, sy);
+    ctx.lineTo(-sx, sy * 0.35);
+    ctx.lineTo(-sx, -sy * 0.35);
+    ctx.lineTo(-sx * 0.2, -sy);
+    ctx.closePath();
+    ctx.fill();
+  } else if (piece.mesh === "claw") {
+    ctx.moveTo(-sx, 0);
+    ctx.quadraticCurveTo(0, sy * 0.2, sx * 0.5, sy * 0.6);
+    ctx.quadraticCurveTo(sx, sy, sx * 0.55, sy * 1.05);
+    ctx.quadraticCurveTo(sx * 0.2, sy * 0.55, -sx, sy * 0.15);
+    ctx.closePath();
+    ctx.fill();
+  } else if (piece.mesh === "plate") {
+    ctx.moveTo(-sx, -sy * 0.85);
+    ctx.lineTo(-sx * 0.2, -sy);
+    ctx.lineTo(sx, -sy * 0.7);
+    ctx.lineTo(sx, sy * 0.7);
+    ctx.lineTo(-sx * 0.2, sy);
+    ctx.lineTo(-sx, sy * 0.85);
+    ctx.closePath();
+    ctx.fill();
+  } else if (piece.mesh === "ring") {
+    ctx.ellipse(0, 0, sx, sy, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, sx * 0.55, sy * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+  } else if (piece.mesh === "dome") {
+    ctx.ellipse(0, 0, sx, sy, 0, Math.PI, Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
   } else {
-    ctx.ellipse(0, 0, Math.max(0.6, piece.sx * radius), Math.max(0.6, piece.sy * radius), 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, sx, piece.mesh === "capsule" || piece.mesh === "tube" ? sy * 0.72 : sy, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.fill();
   ctx.restore();
 }
