@@ -160,8 +160,9 @@ describe("creature layout", () => {
     expect(founder.some((part) => part.name === "tail")).toBe(true);
     expect(founder.some((part) => part.name === "horn")).toBe(false);
     const wired = creatureParts({ ...pose(founderParts(), 0), horn: 3.6 });
-    expect(wired.filter((part) => part.name === "horn")).toHaveLength(1);
+    expect(wired.some((part) => part.name === "horn" && part.mesh === "cone")).toBe(true);
     expect(founder.some((part) => part.name === "tooth")).toBe(true);
+    expect(new Set(founder.map((part) => part.mesh)).size).toBeGreaterThan(3);
   });
 
   it("draws a wider shell, eyespots, and a glow halo when those genes grow", () => {
@@ -169,9 +170,40 @@ describe("creature layout", () => {
     const shell = armored.find((part) => part.name === "shell");
     const torso = armored.find((part) => part.name === "torso");
     expect(shell && torso && shell.sy > torso.sy).toBe(true);
-    expect(armored.some((part) => part.name === "horn")).toBe(true);
-    expect(armored.some((part) => part.name === "eyespot")).toBe(true);
+    expect(armored.some((part) => part.name === "horn" && part.mesh === "cone")).toBe(true);
+    expect(armored.some((part) => part.name === "eyespot" && part.mesh === "ring")).toBe(true);
     expect(armored.some((part) => part.halo)).toBe(true);
+    expect(armored.some((part) => part.mesh === "dome")).toBe(true);
+  });
+
+  it("builds a distinct mesh for each major organ family", () => {
+    const loaded = creatureParts(
+      pose(
+        {
+          ...founderParts(),
+          antenna: 0.8,
+          lateral: 0.8,
+          claw: 0.8,
+          spine: 0.8,
+          venom: 0.8,
+          shell: 0.8,
+          plate: 0.8,
+          camo: 0.8,
+          glow: 0.8,
+          photo: 0.8,
+          siphon: 0.8,
+          jaw: 0.8,
+          horn: 0.8,
+          fin: 0.9,
+          eye: 0.9,
+        },
+        1.8,
+      ),
+    );
+    const meshes = new Set(loaded.map((part) => part.mesh));
+    for (const kind of ["sphere", "capsule", "cone", "fin", "dome", "tube", "claw", "plate", "ring"]) {
+      expect(meshes.has(kind as never)).toBe(true);
+    }
   });
 });
 
