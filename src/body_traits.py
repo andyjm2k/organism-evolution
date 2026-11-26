@@ -117,21 +117,39 @@ class BodyTraits:
         return lines
 
 
-def draw_body(surface, x, y, color, radius, traits):
-    """Draw the cell and any organs that the genome currently expresses."""
+def _rotate(offset, heading):
+    """Rotate a local (x, y) offset by heading radians (screen space, y down)."""
+    cos_h = math.cos(heading)
+    sin_h = math.sin(heading)
+    x, y = offset
+    return (x * cos_h - y * sin_h, x * sin_h + y * cos_h)
+
+
+def _at(center, offset, heading):
+    """Place a local offset at a body center, rotated to the heading."""
+    rx, ry = _rotate(offset, heading)
+    return (center[0] + rx, center[1] + ry)
+
+
+def draw_body(surface, x, y, color, radius, traits, heading=0.0):
+    """Draw the cell and any organs that the genome currently expresses.
+
+    Organs are drawn in body space — jaw forward, flagella behind — and
+    rotated to `heading`, so the creature faces its direction of travel.
+    """
     # On-screen radius stays readable when the world radius is only a few pixels.
     body_radius = max(6, min(16, int(radius) + 2))
     center = (int(x), int(y))
     # Flagella sit behind the body, opposite the mouth.
     if traits.flagella >= _VISIBLE_STRENGTH:
-        _draw_flagella(surface, center, body_radius, traits.flagella, color)
+        _draw_flagella(surface, center, body_radius, traits.flagella, color, heading)
     pygame.draw.circle(surface, color, center, body_radius)
     if traits.jaw >= _VISIBLE_STRENGTH:
-        _draw_jaw(surface, center, body_radius, traits.jaw, color)
+        _draw_jaw(surface, center, body_radius, traits.jaw, color, heading)
     if traits.horn >= _VISIBLE_STRENGTH:
-        _draw_horn(surface, center, body_radius, traits.horn, color)
+        _draw_horn(surface, center, body_radius, traits.horn, color, heading)
     if traits.claw >= _VISIBLE_STRENGTH:
-        _draw_claw(surface, center, body_radius, traits.claw, color)
+        _draw_claw(surface, center, body_radius, traits.claw, color, heading)
 
 
 def _organ_length(radius, strength):
@@ -147,45 +165,45 @@ def _tint(color, toward, amount):
     )
 
 
-def _draw_jaw(surface, center, radius, strength, color):
+def _draw_jaw(surface, center, radius, strength, color, heading=0.0):
     """Mouth wedge on the leading side. Length tracks food-wire strength."""
     length = _organ_length(radius, strength)
     tint = _tint(color, (240, 190, 120), 0.55)
-    tip = (center[0] + length, center[1])
-    upper = (center[0] + radius - 1, center[1] - max(3, radius // 2))
-    lower = (center[0] + radius - 1, center[1] + max(3, radius // 2))
+    tip = _at(center, (length, 0), heading)
+    upper = _at(center, (radius - 1, -max(3, radius // 2)), heading)
+    lower = _at(center, (radius - 1, max(3, radius // 2)), heading)
     pygame.draw.polygon(surface, tint, (upper, tip, lower))
 
 
-def _draw_horn(surface, center, radius, strength, color):
+def _draw_horn(surface, center, radius, strength, color, heading=0.0):
     """Single spike above the body. Length tracks threat-wire strength."""
     length = _organ_length(radius, strength)
     tint = _tint(color, (245, 245, 230), 0.65)
-    left = (center[0] - 3, center[1] - radius + 1)
-    right = (center[0] + 3, center[1] - radius + 1)
-    tip = (center[0], center[1] - length)
+    left = _at(center, (-3, -radius + 1), heading)
+    right = _at(center, (3, -radius + 1), heading)
+    tip = _at(center, (0, -length), heading)
     pygame.draw.polygon(surface, tint, (left, right, tip))
 
 
-def _draw_claw(surface, center, radius, strength, color):
+def _draw_claw(surface, center, radius, strength, color, heading=0.0):
     """Two pincers in front of the body. Reach tracks prey-wire strength."""
     length = _organ_length(radius, strength)
     tint = _tint(color, (230, 170, 130), 0.5)
     spread = max(3, radius // 2)
     for sign in (-1, 1):
-        start = (center[0] + radius - 2, center[1] + sign * spread)
-        end = (center[0] + length, center[1] + sign * (spread + 3))
+        start = _at(center, (radius - 2, sign * spread), heading)
+        end = _at(center, (length, sign * (spread + 3)), heading)
         pygame.draw.line(surface, tint, start, end, 2)
 
 
-def _draw_flagella(surface, center, radius, strength, color):
+def _draw_flagella(surface, center, radius, strength, color, heading=0.0):
     """Tail opposite the mouth. Length tracks core-to-motor wire strength."""
     length = _organ_length(radius, strength)
     tint = _tint(color, (140, 220, 180), 0.55)
     # Three segments make a short wave instead of a rigid spike.
-    points = [ (center[0] - radius + 1, center[1]) ]
+    points = [_at(center, (-radius + 1, 0), heading)]
     for index in range(1, 4):
         along = radius + (length - radius) * index / 3
         wave = 3 * math.sin(index * 1.4) * (1 if index % 2 else -1)
-        points.append((center[0] - along, center[1] + wave))
+        points.append(_at(center, (-along, wave), heading))
     pygame.draw.lines(surface, tint, False, points, 2)

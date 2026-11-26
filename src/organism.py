@@ -57,6 +57,9 @@ class Organism:
         self.organisms_consumed = 0
         # Prior position for velocity sensing.
         self.last_position = position
+        # Facing in radians (screen space, y down). 0 faces +x, like the
+        # fixed-orientation bodies used to draw; take_action updates it.
+        self.heading = 0.0
         # Whether the last action produced movement.
         self.was_moving = False
         # Cooldown bookkeeping for breeding attempts (0 = must wait full cooldown).
@@ -113,8 +116,14 @@ class Organism:
         # Count nodes and connections as complexity proxies.
         self.node_count = len(self.genome.nodes)
         self.connection_count = len(self.genome.connections)
-        # Positive node keys are treated as hidden nodes for visuals.
-        self.hidden_count = len([n for n in self.genome.nodes.keys() if n > 0])
+        # Hidden nodes are the keys above the motor outputs (0..num_outputs-1).
+        # Output keys are not hidden: counting n > 0 overcounted by 3.
+        num_outputs = getattr(
+            getattr(self.config, "genome_config", None), "num_outputs", 4
+        )
+        self.hidden_count = len(
+            [n for n in self.genome.nodes.keys() if n >= num_outputs]
+        )
         # Role-specific base stats.
         base_speed = 1.2 if self.is_carnivore else 1.3
         base_size = 1.1 if self.is_carnivore else 1.0
@@ -204,17 +213,19 @@ class Organism:
         vy = network_output[1]
         breeding_desire = network_output[2]
         rest_desire = network_output[3] if len(network_output) > 3 else -1.0
-        width = self.environment_config.get("width", 800)
-        height = self.environment_config.get("height", 600)
         move_x = move_y = 0.0
         if rest_desire <= 0.5:
             move_x = self.speed * vx
             move_y = self.speed * vy
             move_x += random.uniform(-0.01, 0.01) * self.speed
             move_y += random.uniform(-0.01, 0.01) * self.speed
-        new_x = max(0, min(self.position[0] + move_x, width))
-        new_y = max(0, min(self.position[1] + move_y, height))
+        # No clamp here: the position may leave the arena, and update()
+        # wraps it back through _apply_boundary_rules with the penalty.
+        # Clamping used to make that wrap (and the penalty) unreachable.
+        new_x = self.position[0] + move_x
+        new_y = self.position[1] + move_y
         if abs(move_x) > 0 or abs(move_y) > 0:
+            self.heading = math.atan2(move_y, move_x)
             self.position = (new_x, new_y)
             self.was_moving = True
             self._append_trail_point(self.position)
@@ -434,6 +445,7 @@ class Organism:
             random.randint(10, max(11, height - 10)),
         )
         self.last_position = self.position
+        self.heading = 0.0
         self.steps_taken = 0
         self.food_consumed = 0
         self.organisms_consumed = 0

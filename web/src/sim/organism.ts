@@ -165,8 +165,11 @@ export class Organism {
       moveX = this.speed * vx + this.rng.uniform(-0.01, 0.01) * this.speed;
       moveY = this.speed * vy + this.rng.uniform(-0.01, 0.01) * this.speed;
     }
-    const newX = Math.max(0, Math.min(this.position[0] + moveX, this.environment.width));
-    const newY = Math.max(0, Math.min(this.position[1] + moveY, this.environment.height));
+    // No clamp here: the position may leave the arena, and update()
+    // wraps it back through applyBoundary with the penalty. Clamping
+    // used to make that wrap (and the penalty) unreachable.
+    const newX = this.position[0] + moveX;
+    const newY = this.position[1] + moveY;
     if (moveX !== 0 || moveY !== 0) {
       this.heading = Math.atan2(moveY, moveX);
       this.position = [newX, newY];
@@ -273,7 +276,9 @@ export class Organism {
   private calculateAttributes(): void {
     this.nodeCount = this.genome.nodes.size;
     this.connectionCount = this.genome.connections.size;
-    this.hiddenCount = [...this.genome.nodes.keys()].filter((key) => key > 0).length;
+    // Hidden nodes are the keys above the motor outputs (0..3).
+    // Output keys are not hidden: counting key > 0 overcounted by 3.
+    this.hiddenCount = [...this.genome.nodes.keys()].filter((key) => key > 3).length;
     const hunt = huntIntake(this.diet);
     const baseSpeed = 1.3 + (1.2 - 1.3) * hunt;
     const baseSize = 1 + (1.1 - 1) * hunt;

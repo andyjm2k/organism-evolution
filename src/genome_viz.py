@@ -11,18 +11,20 @@ def build_genome_surface(genome, config, width=260, height=180, font=None):
         return surface
     num_inputs = config.genome_config.num_inputs
     num_outputs = config.genome_config.num_outputs
-    hidden_keys = sorted(k for k in genome.nodes if k > 0)
-    output_keys = sorted(k for k in genome.nodes if k <= 0 and k > -num_outputs)
+    # NEAT node keys: inputs are -1..-num_inputs, outputs are 0..num_outputs-1,
+    # hidden nodes are >= num_outputs. The old ranges (inputs 0..num_inputs-1,
+    # outputs -num_outputs+1..0) were output/hidden keys, so no founding
+    # edge ever had both endpoints placed and the graph drew zero edges.
+    input_nodes = list(range(-1, -num_inputs - 1, -1))
+    hidden_keys = sorted(k for k in genome.nodes if k >= num_outputs)
+    output_keys = sorted(k for k in genome.nodes if 0 <= k < num_outputs)
     if not output_keys:
-        output_keys = sorted(k for k in genome.nodes if k <= 0)
+        output_keys = list(range(num_outputs))
     columns = []
-    input_nodes = list(range(num_inputs))
     columns.append(("in", input_nodes))
     if hidden_keys:
         columns.append(("hid", hidden_keys[:8]))
-    columns.append(
-        ("out", output_keys if output_keys else list(range(-num_outputs, 0)))
-    )
+    columns.append(("out", output_keys))
     col_count = len(columns)
     margin_x, margin_y = 28, 16
     usable_w = width - margin_x * 2
@@ -49,12 +51,13 @@ def build_genome_surface(genome, config, width=260, height=180, font=None):
             1,
         )
     for key, pos in node_positions.items():
-        if key >= 0:
-            color = (80, 140, 220)
-        elif key > -num_outputs:
+        # Match the web genome graph: inputs green, outputs orange, hidden blue.
+        if key < 0:
+            color = (120, 180, 120)
+        elif key < num_outputs:
             color = (220, 120, 80)
         else:
-            color = (120, 180, 120)
+            color = (80, 140, 220)
         pygame.draw.circle(surface, color, pos, 5)
         pygame.draw.circle(surface, (40, 40, 40), pos, 5, 1)
     if font is not None:
