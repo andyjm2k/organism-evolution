@@ -105,16 +105,51 @@ class LivingWorldSimulation:
             self._batch_engine = BatchInferenceEngine()
         self.population = None
         self.renderer = None
+        # Event feed sink: the renderer's note_event when a renderer exists.
+        self._event_sink = None
         if self.sim_config.get("render", True):
             self.renderer = build_living_world_renderer(
                 self.sim_config, self.logging_level
             )
             self.renderer.set_environment_config(self.environment_config)
             self.renderer.set_food_ecology(self.food_ecology)
+            self._event_sink = self.renderer.note_event
         self._pending_births = []
         self._birth_count = 0
         # Eggs that have been laid and are waiting to hatch.
         self._eggs = []
+        # HUD population counts (alive / births / deaths) and the species
+        # set used to spot extinctions. _prev_alive starts None so the
+        # founding population is not counted as births on step one.
+        self._prev_alive = None
+        self._births = 0
+        self._deaths = 0
+        self._last_species_ids = set()
+        self._extinct_notified = set()
+
+    def _note_event(self, text):
+        """Send one line to the HUD event feed, if a renderer is attached."""
+        if self._event_sink is not None:
+            self._event_sink(text)
+
+    def _update_hud_counts(self, alive_organisms):
+        """Track births/deaths and species extinctions for the HUD."""
+        alive_now = len(alive_organisms)
+        if self._prev_alive is None:
+            self._prev_alive = alive_now
+        elif alive_now > self._prev_alive:
+            self._births += alive_now - self._prev_alive
+        elif alive_now < self._prev_alive:
+            self._deaths += self._prev_alive - alive_now
+        self._prev_alive = alive_now
+        alive_ids = {org.species_id for org in alive_organisms}
+        for species_id in sorted(self._last_species_ids - alive_ids):
+            if species_id not in self._extinct_notified:
+                self._note_event(f"Species {species_id} went extinct")
+                self._extinct_notified.add(species_id)
+        self._last_species_ids = alive_ids
+        if self.renderer is not None:
+            self.renderer.set_hud_stats(alive_now, self._births, self._deaths)
 
     def register_birth(self, child, child_genome, parent_a, parent_b):
         """Admit an in-world birth into the live population."""
@@ -250,6 +285,7 @@ class LivingWorldSimulation:
         self.food_ecology.laid_eggs = self._eggs
         if self.clock.step % 500 == 0:
             self.food_ecology.prune_consumed()
+        self._update_hud_counts(next_organisms)
         self.clock.tick()
         return next_organisms
 
@@ -277,6 +313,7 @@ class LivingWorldSimulation:
             self._batch_engine,
             self.neat_config,
             self.sim_config,
+            event_sink=self._event_sink,
         )
         for organism in self.registry.all_organisms():
             organism.simulation = self

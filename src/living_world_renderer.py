@@ -48,6 +48,8 @@ class LivingWorldRenderer(RendererCommon):
         self._food_ecology = None
         # Rolling one-line event feed (new species, extinction, cull, drought).
         self._event_feed = []
+        # HUD population counts, set by the simulation each step.
+        self._hud_stats = (0, 0, 0)
         # Drought state on the previous frame, for the "drought ends" notice.
         self._drought_was_active = False
         log_detailed(
@@ -78,6 +80,10 @@ class LivingWorldRenderer(RendererCommon):
         """Append one line to the rolling event feed (kept to the last 5)."""
         self._event_feed.append(str(text))
         del self._event_feed[:-5]
+
+    def set_hud_stats(self, alive, births, deaths):
+        """Store the population counts the HUD shows each frame."""
+        self._hud_stats = (alive, births, deaths)
 
     def handle_event(self, event, organisms):
         """Process mouse events for pan, select, track, and god controls."""
@@ -343,51 +349,64 @@ class LivingWorldRenderer(RendererCommon):
         )
 
     def _draw_hud(self, surface, organisms, food_ecology):
-        """Draw top-left status text."""
+        """Draw top-left status text: stats, drought notice, event feed.
+
+        One cached surface, rebuilt only when a line changes (step, counts,
+        food, species, drought, or a new feed entry).
+        """
         species_count = len({org.species_id for org in organisms}) if organisms else 0
         food_count = food_ecology.active_food_count()
         scarcity = food_ecology.scarcity_ratio()
-        drought = (
-            food_ecology.drought_remaining if food_ecology is not None else 0
-        )
+        drought = food_ecology.drought_remaining if food_ecology is not None else 0
         if self._drought_was_active and drought == 0:
             self.note_event("Drought ends — clouds resume")
         self._drought_was_active = drought > 0
+        alive, births, deaths = self._hud_stats
+        feed = tuple(self._event_feed[-3:])
         hud_key = (
-            food_count,
             self.world_step,
+            alive,
+            births,
+            deaths,
+            food_count,
             species_count,
             int(scarcity * 100),
             drought,
+            feed,
         )
         if self._hud_key != hud_key:
             track = "ON" if self.track_selected and self.selected_organism else "OFF"
-            text = (
-                f"Step {self.world_step} | Food {food_count} "
-                f"({scarcity:.0%}) | Species {species_count} | Track {track}"
+            lines = [
+                (
+                    f"Step {self.world_step} | Food {food_count} "
+                    f"({scarcity:.0%}) | Species {species_count} | Track {track}",
+                    (220, 230, 240),
+                ),
+                (
+                    f"Alive {alive} | Births {births} | Deaths {deaths}",
+                    (170, 200, 180),
+                ),
+            ]
+            if drought > 0:
+                lines.append(
+                    (f"Drought! Clouds paused — {drought} steps left", (255, 190, 90))
+                )
+            for entry in feed:
+                lines.append((f"• {entry}", (150, 165, 180)))
+            rendered = [self.font.render(text, True, color) for text, color in lines]
+            width = max(text.get_width() for text in rendered) + 16
+            height = sum(text.get_height() for text in rendered) + 8 * (
+                len(rendered) + 1
             )
-            self._hud_surface = self.font.render(text, True, (220, 230, 240))
+            hud = pygame.Surface((width, height), pygame.SRCALPHA)
+            hud.fill((0, 0, 0, 140))
+            y = 8
+            for text in rendered:
+                hud.blit(text, (8, y))
+                y += text.get_height() + 8
+            self._hud_surface = hud
             self._hud_key = hud_key
-        bg = pygame.Surface(
-            (self._hud_surface.get_width() + 16, self._hud_surface.get_height() + 8),
-            pygame.SRCALPHA,
-        )
-        bg.fill((0, 0, 0, 140))
-        surface.blit(bg, (8, 8))
-        surface.blit(self._hud_surface, (16, 12))
-        if drought > 0:
-            notice = self.font.render(
-                f"Drought! Clouds paused — {drought} steps left",
-                True,
-                (255, 190, 90),
-            )
-            notice_bg = pygame.Surface(
-                (notice.get_width() + 16, notice.get_height() + 8),
-                pygame.SRCALPHA,
-            )
-            notice_bg.fill((0, 0, 0, 140))
-            surface.blit(notice_bg, (8, 8 + bg.get_height() + 6))
-            surface.blit(notice, (16, 12 + bg.get_height() + 6))
+        surface.blit(self._hud_surface, (8, 8))
 
     def _draw_minimap(self, surface, organisms, food_items, clouds):
         """Draw world overview with viewport indicator in the top-right."""
