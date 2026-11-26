@@ -43,6 +43,13 @@ class LivingWorldRenderer(RendererCommon):
         self._hud_key = None
         self._hud_surface = None
         self._panel_surfaces = {}
+        # Food ecology for god controls (right-click / F food burst, D drought).
+        # Set by the simulation via set_food_ecology; None keeps input inert.
+        self._food_ecology = None
+        # Rolling one-line event feed (new species, extinction, cull, drought).
+        self._event_feed = []
+        # Drought state on the previous frame, for the "drought ends" notice.
+        self._drought_was_active = False
         log_detailed(
             logging_level,
             f"Living world renderer: world {self.world_width}x{self.world_height}, "
@@ -63,24 +70,38 @@ class LivingWorldRenderer(RendererCommon):
         """Update HUD world step counter."""
         self.world_step = step
 
+    def set_food_ecology(self, food_ecology):
+        """Store the ecology god controls act on (food burst, drought)."""
+        self._food_ecology = food_ecology
+
+    def note_event(self, text):
+        """Append one line to the rolling event feed (kept to the last 5)."""
+        self._event_feed.append(str(text))
+        del self._event_feed[:-5]
+
     def handle_event(self, event, organisms):
-        """Process mouse events for pan, select, and track."""
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        """Process mouse events for pan, select, track, and god controls."""
+        if event.type == pygame.MOUSEBUTTONDOWN:
             pos = event.pos
-            if self._in_viewport(pos):
-                if self._point_in_minimap(pos):
-                    self._minimap_jump(pos)
-                else:
-                    world_pos = self._screen_to_world_viewport(pos)
-                    picked = self._pick_organism(world_pos, organisms)
-                    if picked is not None:
-                        self.set_selected_organism(picked)
-                        self.track_selected = True
-                        self.camera.set_track_target(picked.position)
-                    else:
-                        self.camera.begin_drag(pos)
+            if (
+                event.button == 3
+                and self._in_viewport(pos)
+                and not self._point_in_minimap(pos)
+            ):
+                self._drop_food_burst_at(pos)
             elif event.button == 1:
-                pass
+                if self._in_viewport(pos):
+                    if self._point_in_minimap(pos):
+                        self._minimap_jump(pos)
+                    else:
+                        world_pos = self._screen_to_world_viewport(pos)
+                        picked = self._pick_organism(world_pos, organisms)
+                        if picked is not None:
+                            self.set_selected_organism(picked)
+                            self.track_selected = True
+                            self.camera.set_track_target(picked.position)
+                        else:
+                            self.camera.begin_drag(pos)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             self.camera.end_drag()
         elif event.type == pygame.MOUSEMOTION and self.camera.is_dragging():
@@ -96,6 +117,28 @@ class LivingWorldRenderer(RendererCommon):
                 self.track_selected = not self.track_selected
                 if not self.track_selected:
                     self.camera.clear_track()
+            elif event.key == pygame.K_f:
+                self._drop_food_burst_at(
+                    (self.viewport_width // 2, self.viewport_height // 2)
+                )
+            elif event.key == pygame.K_d:
+                self._start_drought()
+
+    def _drop_food_burst_at(self, screen_pos):
+        """Drop a food burst at a viewport point, if the ecology is wired up."""
+        if self._food_ecology is None:
+            return
+        world_x, world_y = self._screen_to_world_viewport(screen_pos)
+        placed = self._food_ecology.drop_food_burst(world_x, world_y)
+        if placed:
+            self.note_event(f"Food burst dropped ({placed} pellets)")
+
+    def _start_drought(self):
+        """Pause nutrient-cloud spawning for a fixed step window."""
+        if self._food_ecology is None:
+            return
+        remaining = self._food_ecology.start_drought()
+        self.note_event(f"Drought begins — clouds paused for {remaining} steps")
 
     def render(self, organisms, food_items, nutrient_clouds, food_ecology):
         """Draw one living-world frame."""
@@ -304,7 +347,19 @@ class LivingWorldRenderer(RendererCommon):
         species_count = len({org.species_id for org in organisms}) if organisms else 0
         food_count = food_ecology.active_food_count()
         scarcity = food_ecology.scarcity_ratio()
-        hud_key = (food_count, self.world_step, species_count, int(scarcity * 100))
+        drought = (
+            food_ecology.drought_remaining if food_ecology is not None else 0
+        )
+        if self._drought_was_active and drought == 0:
+            self.note_event("Drought ends — clouds resume")
+        self._drought_was_active = drought > 0
+        hud_key = (
+            food_count,
+            self.world_step,
+            species_count,
+            int(scarcity * 100),
+            drought,
+        )
         if self._hud_key != hud_key:
             track = "ON" if self.track_selected and self.selected_organism else "OFF"
             text = (
@@ -320,6 +375,19 @@ class LivingWorldRenderer(RendererCommon):
         bg.fill((0, 0, 0, 140))
         surface.blit(bg, (8, 8))
         surface.blit(self._hud_surface, (16, 12))
+        if drought > 0:
+            notice = self.font.render(
+                f"Drought! Clouds paused — {drought} steps left",
+                True,
+                (255, 190, 90),
+            )
+            notice_bg = pygame.Surface(
+                (notice.get_width() + 16, notice.get_height() + 8),
+                pygame.SRCALPHA,
+            )
+            notice_bg.fill((0, 0, 0, 140))
+            surface.blit(notice_bg, (8, 8 + bg.get_height() + 6))
+            surface.blit(notice, (16, 12 + bg.get_height() + 6))
 
     def _draw_minimap(self, surface, organisms, food_items, clouds):
         """Draw world overview with viewport indicator in the top-right."""
@@ -399,7 +467,11 @@ class LivingWorldRenderer(RendererCommon):
             font=self.font,
         )
         panel_surface.blit(genome_surface, (14, y + 4))
-        hint = self.font.render("Drag to pan | T track | Esc clear", True, (120, 130, 140))
+        hint = self.font.render(
+            "Drag to pan | Right-click food | F burst | D drought | T track | Esc clear",
+            True,
+            (120, 130, 140),
+        )
         panel_surface.blit(hint, (14, panel_h - 24))
         surface.blit(panel_surface, panel.topleft)
 

@@ -110,6 +110,7 @@ class LivingWorldSimulation:
                 self.sim_config, self.logging_level
             )
             self.renderer.set_environment_config(self.environment_config)
+            self.renderer.set_food_ecology(self.food_ecology)
         self._pending_births = []
         self._birth_count = 0
         # Eggs that have been laid and are waiting to hatch.

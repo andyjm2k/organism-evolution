@@ -58,6 +58,9 @@ class FoodEcology:
         self.scarcity_multiplier = float(
             sim_config.get("food_regrowth_scarcity_multiplier", 2.5)
         )
+        # Drought event: steps of paused cloud spawning left (0 = not running).
+        self.drought_duration = int(sim_config.get("drought_duration_steps", 600))
+        self._drought_remaining = 0
         # Live food pellets.
         self.food_items = []
         # Nutrient clouds that drive regrowth.
@@ -154,6 +157,35 @@ class FoodEcology:
             return 1.0
         return self.active_food_count() / float(self.target_density)
 
+    @property
+    def drought_remaining(self):
+        """Steps of paused cloud spawning left (0 when no drought is running)."""
+        return self._drought_remaining
+
+    def start_drought(self, duration=None):
+        """Pause nutrient-cloud spawning for a fixed step window."""
+        self._drought_remaining = int(
+            duration if duration is not None else self.drought_duration
+        )
+        return self._drought_remaining
+
+    def drop_food_burst(self, x, y, count=12, radius=100):
+        """Drop a cluster of fresh pellets at a world point (god control)."""
+        placed = 0
+        for _ in range(count):
+            if not self.has_food_room():
+                break
+            angle = random.uniform(0, 2 * math.pi)
+            dist = random.uniform(0, radius)
+            px = int(max(5, min(self.world_width - 5, x + math.cos(angle) * dist)))
+            py = int(max(5, min(self.world_height - 5, y + math.sin(angle) * dist)))
+            food = Food(px, py, strain=make_founder_strain())
+            food.cloud = None
+            food.ecology = self
+            self.food_items.append(food)
+            placed += 1
+        return placed
+
     def tick(self):
         """Drift clouds and attempt food regrowth from nutrient fields."""
         for cloud in self.clouds:
@@ -166,6 +198,11 @@ class FoodEcology:
         # them up faster than the occasional prune could drop them.
         self.prune_consumed()
         self._trim_to_cap()
+        # A drought pauses cloud spawning only; regrowth and plant seeds
+        # from bites still run, so the world gets harder, not frozen.
+        if self._drought_remaining > 0:
+            self._drought_remaining -= 1
+            return
         ratio = self.scarcity_ratio()
         spawn_boost = 1.0
         if ratio < self.scarcity_threshold:
