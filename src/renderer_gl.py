@@ -7,6 +7,7 @@ import pygame
 from pygame import DOUBLEBUF, OPENGL
 
 from logging_util import log_detailed
+from plant_strain import pellet_color
 from renderer_common import RendererCommon
 
 # GLSL 330: instanced unit quad scaled to entity radius with circular fragment mask.
@@ -189,27 +190,23 @@ class ModernGLRenderer(RendererCommon):
         program["u_screen_size"].value = (float(screen_w), float(screen_h))
 
     def _draw_food(self, food_items):
-        """Draw food pellets as instanced green circles."""
+        """Draw food pellets as instanced strain-coloured circles."""
         if not food_items:
             return
         render_limit = 500
-        food_color = (
-            self.colors["food"][0] / 255.0,
-            self.colors["food"][1] / 255.0,
-            self.colors["food"][2] / 255.0,
-        )
         instances = []
         for food in food_items[:render_limit]:
             if food.position is None:
                 continue
+            red, green, blue = pellet_color(food)
             instances.extend(
                 [
                     food.position[0],
                     food.position[1],
                     4.0,
-                    food_color[0],
-                    food_color[1],
-                    food_color[2],
+                    red / 255.0,
+                    green / 255.0,
+                    blue / 255.0,
                 ]
             )
         if not instances:

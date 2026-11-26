@@ -63,6 +63,50 @@ class TestCamera(unittest.TestCase):
         self.assertGreaterEqual(camera.offset_x, 0)
         self.assertLessEqual(camera.offset_y, 300)
 
+    def test_zoom_at_keeps_cursor_world_point_fixed(self):
+        camera = Camera(4000, 4000, 800, 600)
+        camera.center_on(2000, 2000)
+        before = camera.screen_to_world(400, 300)
+        camera.zoom_at(400, 300, 1)
+        self.assertGreater(camera.zoom, 1.0)
+        after = camera.screen_to_world(400, 300)
+        self.assertAlmostEqual(after[0], before[0], places=3)
+        self.assertAlmostEqual(after[1], before[1], places=3)
+
+    def test_zoom_clamps_to_min_max(self):
+        camera = Camera(4000, 4000, 800, 600)
+        for _ in range(30):
+            camera.zoom_at(400, 300, 1)
+        self.assertAlmostEqual(camera.zoom, camera.max_zoom, places=6)
+        for _ in range(60):
+            camera.zoom_at(400, 300, -1)
+        self.assertAlmostEqual(camera.zoom, camera.min_zoom, places=6)
+
+    def test_world_to_screen_scales_with_zoom(self):
+        camera = Camera(4000, 4000, 800, 600)
+        camera.zoom_at(0, 0, 1)
+        sx, sy = camera.world_to_screen(100, 100)
+        self.assertAlmostEqual(sx, 100 * camera.zoom, places=3)
+        wx, wy = camera.screen_to_world(sx, sy)
+        self.assertAlmostEqual(wx, 100, places=3)
+        self.assertAlmostEqual(wy, 100, places=3)
+
+    def test_viewport_rect_shrinks_when_zoomed(self):
+        camera = Camera(4000, 4000, 800, 600)
+        camera.zoom_at(0, 0, 1)
+        x0, y0, x1, y1 = camera.viewport_rect_world()
+        self.assertAlmostEqual(x1 - x0, 800 / camera.zoom, places=3)
+        self.assertAlmostEqual(y1 - y0, 600 / camera.zoom, places=3)
+
+    def test_drag_scales_with_zoom(self):
+        camera = Camera(4000, 4000, 800, 600)
+        camera.center_on(2000, 2000)
+        camera.zoom_at(400, 300, 1)
+        start_x = camera.offset_x
+        camera.begin_drag((400, 300))
+        camera.drag_to((500, 300))
+        self.assertAlmostEqual(camera.offset_x, start_x - 100 / camera.zoom, places=3)
+
 
 if __name__ == "__main__":
     unittest.main()

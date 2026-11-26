@@ -27,12 +27,19 @@ class SelectionScheduler:
         return step > 0 and step % self.interval_steps == 0
 
     def run(
-        self, population, registry, fitness_tracker, batch_engine, neat_config, sim_config=None
+        self, population, registry, fitness_tracker, batch_engine, neat_config, sim_config=None,
+        event_sink=None,
     ):
-        """Cull only at capacity, then inject offspring of top performers."""
+        """Cull only at capacity, then inject offspring of top performers.
+
+        event_sink, when given, receives one-line notices (extinction
+        reseed, culls, new species) for the living-world HUD event feed.
+        """
         alive = registry.alive_organisms()
         if not alive:
             log_always("Selection: population extinct — reseeding immigrants")
+            if event_sink is not None:
+                event_sink("Population extinct — reseeding immigrants")
             self._inject_immigrants(
                 population,
                 registry,
@@ -55,6 +62,8 @@ class SelectionScheduler:
                 f"Selection: culled {len(culled)} organisms at capacity "
                 f"({registry.count()} remain)"
             )
+            if event_sink is not None:
+                event_sink(f"Cull: {len(culled)} weakest removed at capacity")
         deficit = self.max_population - registry.count()
         if deficit > 0 and random.random() < self.immigration_rate:
             inject = min(deficit, max(1, int(deficit * 0.3)))
@@ -68,7 +77,11 @@ class SelectionScheduler:
                 inject,
             )
         # Re-cluster whoever is still alive so species ids follow the genomes.
+        species_before = len({org.species_id for org in registry.alive_organisms()})
         self._refresh_species(population, registry, neat_config, sim_config)
+        species_after = len({org.species_id for org in registry.alive_organisms()})
+        if species_after > species_before and event_sink is not None:
+            event_sink(f"New species founded ({species_after} living)")
 
     def _inject_immigrants(
         self,

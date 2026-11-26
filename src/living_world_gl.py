@@ -20,12 +20,13 @@ in float in_radius;
 in vec3 in_color;
 uniform vec2 u_screen_size;
 uniform vec2 u_camera;
+uniform float u_zoom;
 out vec3 v_color;
 out vec2 v_local;
 void main() {
     // Radius has to be read here. Otherwise the linker drops the attribute
     // and the instanced buffer cannot be attached.
-    vec2 screen = (in_center - u_camera) + in_corner * in_radius;
+    vec2 screen = (in_center - u_camera) * u_zoom + in_corner * in_radius * u_zoom;
     vec2 ndc = (screen / u_screen_size) * 2.0 - 1.0;
     ndc.y = -ndc.y;
     gl_Position = vec4(ndc, 0.0, 1.0);
@@ -84,6 +85,9 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
     def __init__(self, sim_config, logging_level="normal"):
         super().__init__(sim_config, logging_level=logging_level)
         pygame.display.set_caption("Living World Evolution (GPU)")
+        # Reused overlay surfaces (item 12): redrawn, not reallocated.
+        self._world_overlay_surface = None
+        self._ui_overlay_surface = None
         self.ctx = moderngl.create_context()
         self._circle_prog = self.ctx.program(
             vertex_shader=_CIRCLE_VERTEX_SHADER,
@@ -152,9 +156,15 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
 
     def _draw_world_overlay(self, organisms, nutrient_clouds):
         """Clouds and trails stay on a pygame surface behind the instances."""
-        overlay = pygame.Surface(
-            (self.viewport_width, self.viewport_height), pygame.SRCALPHA
-        )
+        if (
+            self._world_overlay_surface is None
+            or self._world_overlay_surface.get_size()
+            != (self.viewport_width, self.viewport_height)
+        ):
+            self._world_overlay_surface = pygame.Surface(
+                (self.viewport_width, self.viewport_height), pygame.SRCALPHA
+            )
+        overlay = self._world_overlay_surface
         overlay.fill((18, 22, 28, 255))
         self._draw_nutrient_clouds(overlay, nutrient_clouds)
         if organisms:
@@ -179,8 +189,8 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
     def _append_circle(self, instances, position, radius, color):
         """Add one circle if it overlaps the current viewport."""
         margin = radius + 8.0
-        sx = position[0] - self.camera.offset_x
-        sy = position[1] - self.camera.offset_y
+        sx = (position[0] - self.camera.offset_x) * self.camera.zoom
+        sy = (position[1] - self.camera.offset_y) * self.camera.zoom
         if sx < -margin or sy < -margin:
             return
         if sx > self.viewport_width + margin or sy > self.viewport_height + margin:
@@ -206,6 +216,7 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
             float(self.camera.offset_x),
             float(self.camera.offset_y),
         )
+        self._circle_prog["u_zoom"].value = float(self.camera.zoom)
         data = struct.pack(f"{len(instances)}f", *instances)
         if self._instance_vbo.size < len(data):
             self._instance_vbo.orphan(size=len(data))
@@ -214,9 +225,17 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
 
     def _draw_ui_overlay(self, organisms, food_items, nutrient_clouds, food_ecology):
         """Bodies with organs, then HUD, minimap, and the tracked inspection panel."""
-        ui = pygame.Surface(
-            (self.viewport_width, self.viewport_height), pygame.SRCALPHA
-        )
+        if (
+            self._ui_overlay_surface is None
+            or self._ui_overlay_surface.get_size()
+            != (self.viewport_width, self.viewport_height)
+        ):
+            self._ui_overlay_surface = pygame.Surface(
+                (self.viewport_width, self.viewport_height), pygame.SRCALPHA
+            )
+        ui = self._ui_overlay_surface
+        # The overlay is reused: clear last frame's bodies and text first.
+        ui.fill((0, 0, 0, 0))
         # Same body routine as the pygame renderer: color, size, jaw, horn, claw, flagella.
         for organism in organisms:
             self._draw_organism(ui, organism)
@@ -236,7 +255,10 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
 
     def _blit_surface(self, name, surface, x, y):
         """Upload one pygame surface and draw it in screen pixels."""
-        surface = surface.convert_alpha()
+        # The overlays are already per-pixel alpha; converting them again
+        # would copy a full frame-sized surface on every frame.
+        if not (surface.get_flags() & pygame.SRCALPHA):
+            surface = surface.convert_alpha()
         width, height = surface.get_size()
         texture = self._textures.get(name)
         if texture is None or texture.size != (width, height):

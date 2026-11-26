@@ -143,6 +143,15 @@ canvas.addEventListener("pointermove", (event) => {
 });
 canvas.addEventListener("pointerup", () => camera.endDrag());
 canvas.addEventListener("pointerleave", () => camera.endDrag());
+canvas.addEventListener(
+  "wheel",
+  (event) => {
+    event.preventDefault();
+    const point = localPoint(event);
+    camera.zoomAt(point.x, point.y, event.deltaY < 0 ? 1 : -1);
+  },
+  { passive: false },
+);
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "s" || event.key === "S") {
@@ -345,7 +354,7 @@ mountAnatomyBoard(
   document.querySelector("#anatomy-dialog") as HTMLDialogElement,
 );
 
-function localPoint(event: PointerEvent): { x: number; y: number } {
+function localPoint(event: PointerEvent | WheelEvent): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }

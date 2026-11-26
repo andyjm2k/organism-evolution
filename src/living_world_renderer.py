@@ -43,6 +43,25 @@ class LivingWorldRenderer(RendererCommon):
         self._hud_key = None
         self._hud_surface = None
         self._panel_surfaces = {}
+        # Per-frame surface caches (item 12): rebuilt only when their
+        # inputs change, instead of allocating a fresh surface each frame.
+        self._viewport_surface = None
+        self._cloud_surfaces = {}
+        self._ring_surfaces = {}
+        self._panel_surface = None
+        self._panel_bg = None
+        self._genome_surfaces = {}
+        self._minimap_label = None
+        self._hint_surface = None
+        # Food ecology for god controls (right-click / F food burst, D drought).
+        # Set by the simulation via set_food_ecology; None keeps input inert.
+        self._food_ecology = None
+        # Rolling one-line event feed (new species, extinction, cull, drought).
+        self._event_feed = []
+        # HUD population counts, set by the simulation each step.
+        self._hud_stats = (0, 0, 0)
+        # Drought state on the previous frame, for the "drought ends" notice.
+        self._drought_was_active = False
         log_detailed(
             logging_level,
             f"Living world renderer: world {self.world_width}x{self.world_height}, "
@@ -63,28 +82,56 @@ class LivingWorldRenderer(RendererCommon):
         """Update HUD world step counter."""
         self.world_step = step
 
+    def set_food_ecology(self, food_ecology):
+        """Store the ecology god controls act on (food burst, drought)."""
+        self._food_ecology = food_ecology
+
+    def note_event(self, text):
+        """Append one line to the rolling event feed (kept to the last 5)."""
+        self._event_feed.append(str(text))
+        del self._event_feed[:-5]
+
+    def set_hud_stats(self, alive, births, deaths):
+        """Store the population counts the HUD shows each frame."""
+        self._hud_stats = (alive, births, deaths)
+
     def handle_event(self, event, organisms):
-        """Process mouse events for pan, select, and track."""
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        """Process mouse events for pan, select, track, and god controls."""
+        if event.type == pygame.MOUSEBUTTONDOWN:
             pos = event.pos
-            if self._in_viewport(pos):
-                if self._point_in_minimap(pos):
-                    self._minimap_jump(pos)
-                else:
-                    world_pos = self._screen_to_world_viewport(pos)
-                    picked = self._pick_organism(world_pos, organisms)
-                    if picked is not None:
-                        self.set_selected_organism(picked)
-                        self.track_selected = True
-                        self.camera.set_track_target(picked.position)
-                    else:
-                        self.camera.begin_drag(pos)
+            if event.button in (4, 5) and self._in_viewport(pos):
+                # Legacy wheel buttons (some drivers still emit them).
+                self.camera.zoom_at(pos[0], pos[1], 1 if event.button == 4 else -1)
+            elif (
+                event.button == 3
+                and self._in_viewport(pos)
+                and not self._point_in_minimap(pos)
+            ):
+                self._drop_food_burst_at(pos)
             elif event.button == 1:
-                pass
+                if self._in_viewport(pos):
+                    if self._point_in_minimap(pos):
+                        self._minimap_jump(pos)
+                    else:
+                        world_pos = self._screen_to_world_viewport(pos)
+                        picked = self._pick_organism(world_pos, organisms)
+                        if picked is not None:
+                            self.set_selected_organism(picked)
+                            self.track_selected = True
+                            self.camera.set_track_target(picked.position)
+                        else:
+                            self.camera.begin_drag(pos)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             self.camera.end_drag()
         elif event.type == pygame.MOUSEMOTION and self.camera.is_dragging():
             self.camera.drag_to(event.pos)
+        elif event.type == pygame.MOUSEWHEEL:
+            pos = getattr(event, "pos", None) or (
+                self.viewport_width // 2,
+                self.viewport_height // 2,
+            )
+            if self._in_viewport(pos):
+                self.camera.zoom_at(pos[0], pos[1], event.y)
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_s:
                 self.toggle_sense_rings()
@@ -96,6 +143,28 @@ class LivingWorldRenderer(RendererCommon):
                 self.track_selected = not self.track_selected
                 if not self.track_selected:
                     self.camera.clear_track()
+            elif event.key == pygame.K_f:
+                self._drop_food_burst_at(
+                    (self.viewport_width // 2, self.viewport_height // 2)
+                )
+            elif event.key == pygame.K_d:
+                self._start_drought()
+
+    def _drop_food_burst_at(self, screen_pos):
+        """Drop a food burst at a viewport point, if the ecology is wired up."""
+        if self._food_ecology is None:
+            return
+        world_x, world_y = self._screen_to_world_viewport(screen_pos)
+        placed = self._food_ecology.drop_food_burst(world_x, world_y)
+        if placed:
+            self.note_event(f"Food burst dropped ({placed} pellets)")
+
+    def _start_drought(self):
+        """Pause nutrient-cloud spawning for a fixed step window."""
+        if self._food_ecology is None:
+            return
+        remaining = self._food_ecology.start_drought()
+        self.note_event(f"Drought begins — clouds paused for {remaining} steps")
 
     def render(self, organisms, food_items, nutrient_clouds, food_ecology):
         """Draw one living-world frame."""
@@ -108,7 +177,15 @@ class LivingWorldRenderer(RendererCommon):
         ):
             self.camera.set_track_target(self.selected_organism.position)
 
-        viewport = pygame.Surface((self.viewport_width, self.viewport_height))
+        if (
+            self._viewport_surface is None
+            or self._viewport_surface.get_size()
+            != (self.viewport_width, self.viewport_height)
+        ):
+            self._viewport_surface = pygame.Surface(
+                (self.viewport_width, self.viewport_height)
+            )
+        viewport = self._viewport_surface
         viewport.fill((18, 22, 28))
         self._draw_nutrient_clouds(viewport, nutrient_clouds)
         self._draw_food(viewport, food_items)
@@ -192,17 +269,23 @@ class LivingWorldRenderer(RendererCommon):
         """Draw semi-transparent nutrient cloud fields."""
         for cloud in clouds:
             sx, sy = self._world_to_viewport(cloud.position[0], cloud.position[1])
-            if not self._on_screen(sx, sy, cloud.radius):
+            radius = int(cloud.radius * self.camera.zoom)
+            if radius <= 0 or not self._on_screen(sx, sy, radius):
                 continue
-            radius = int(cloud.radius)
             alpha = int(40 + 60 * cloud.intensity)
-            cloud_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-            color = (60, 200, 90, alpha)
-            pygame.draw.circle(cloud_surface, color, (radius, radius), radius)
-            inner = (120, 240, 140, alpha // 2)
-            pygame.draw.circle(
-                cloud_surface, inner, (radius, radius), int(radius * 0.55)
-            )
+            cache_key = (radius, alpha)
+            cloud_surface = self._cloud_surfaces.get(cache_key)
+            if cloud_surface is None:
+                cloud_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+                color = (60, 200, 90, alpha)
+                pygame.draw.circle(cloud_surface, color, (radius, radius), radius)
+                inner = (120, 240, 140, alpha // 2)
+                pygame.draw.circle(
+                    cloud_surface, inner, (radius, radius), int(radius * 0.55)
+                )
+                if len(self._cloud_surfaces) > 128:
+                    self._cloud_surfaces.clear()
+                self._cloud_surfaces[cache_key] = cloud_surface
             surface.blit(cloud_surface, (sx - radius, sy - radius))
 
     def _draw_food(self, surface, food_items):
@@ -214,13 +297,17 @@ class LivingWorldRenderer(RendererCommon):
             if self._on_screen(sx, sy, 6):
                 color = pellet_color(food)
                 radius = 2 if getattr(food, "regrow_in", 0) > 0 else 3
-                pygame.draw.circle(surface, color, (sx, sy), radius)
+                pygame.draw.circle(
+                    surface, color, (sx, sy), max(1, int(radius * self.camera.zoom))
+                )
         for egg in getattr(self, "_eggs_to_draw", ()):
             if getattr(egg, "position", None) is None:
                 continue
             sx, sy = self._world_to_viewport(egg.position[0], egg.position[1])
             if self._on_screen(sx, sy, 8):
-                pygame.draw.circle(surface, (230, 210, 160), (sx, sy), 4)
+                pygame.draw.circle(
+                    surface, (230, 210, 160), (sx, sy), max(1, int(4 * self.camera.zoom))
+                )
 
     def _draw_trails(self, surface, organisms):
         """Draw movement trails with camera offset applied."""
@@ -261,8 +348,17 @@ class LivingWorldRenderer(RendererCommon):
         for radius, color in rings:
             if radius <= 0:
                 continue
-            ring = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(ring, color, (radius, radius), int(radius), 1)
+            radius = int(radius * self.camera.zoom)
+            if radius <= 0:
+                continue
+            cache_key = (radius, color)
+            ring = self._ring_surfaces.get(cache_key)
+            if ring is None:
+                ring = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+                pygame.draw.circle(ring, color, (radius, radius), radius, 1)
+                if len(self._ring_surfaces) > 64:
+                    self._ring_surfaces.clear()
+                self._ring_surfaces[cache_key] = ring
             surface.blit(ring, (sx - radius, sy - radius))
 
     def _organism_color(self, organism):
@@ -278,13 +374,22 @@ class LivingWorldRenderer(RendererCommon):
         if organism.position is None or organism.energy <= 0:
             return
         sx, sy = self._world_to_viewport(organism.position[0], organism.position[1])
-        if not self._on_screen(sx, sy, 30):
+        body_radius = organism.get_radius() * self.camera.zoom
+        if not self._on_screen(sx, sy, int(body_radius) + 10):
             return
         # Each body is drawn from its own genome, so jaws and horns are not
         # shared across a species that has already started to diverge.
         traits = BodyTraits.from_organism(organism)
         color = self._organism_color(organism)
-        draw_body(surface, sx, sy, color, organism.get_radius(), traits)
+        draw_body(
+            surface,
+            sx,
+            sy,
+            color,
+            body_radius,
+            traits,
+            heading=getattr(organism, "heading", 0.0),
+        )
 
     def _draw_selection(self, surface, organism):
         """Highlight the tracked organism."""
@@ -295,31 +400,69 @@ class LivingWorldRenderer(RendererCommon):
             surface,
             (255, 210, 60),
             (sx, sy),
-            int(organism.get_radius()) + 8,
+            int(organism.get_radius() * self.camera.zoom) + 8,
             2,
         )
 
     def _draw_hud(self, surface, organisms, food_ecology):
-        """Draw top-left status text."""
+        """Draw top-left status text: stats, drought notice, event feed.
+
+        One cached surface, rebuilt only when a line changes (step, counts,
+        food, species, drought, or a new feed entry).
+        """
         species_count = len({org.species_id for org in organisms}) if organisms else 0
         food_count = food_ecology.active_food_count()
         scarcity = food_ecology.scarcity_ratio()
-        hud_key = (food_count, self.world_step, species_count, int(scarcity * 100))
+        drought = food_ecology.drought_remaining if food_ecology is not None else 0
+        if self._drought_was_active and drought == 0:
+            self.note_event("Drought ends — clouds resume")
+        self._drought_was_active = drought > 0
+        alive, births, deaths = self._hud_stats
+        feed = tuple(self._event_feed[-3:])
+        hud_key = (
+            self.world_step,
+            alive,
+            births,
+            deaths,
+            food_count,
+            species_count,
+            int(scarcity * 100),
+            drought,
+            feed,
+        )
         if self._hud_key != hud_key:
             track = "ON" if self.track_selected and self.selected_organism else "OFF"
-            text = (
-                f"Step {self.world_step} | Food {food_count} "
-                f"({scarcity:.0%}) | Species {species_count} | Track {track}"
+            lines = [
+                (
+                    f"Step {self.world_step} | Food {food_count} "
+                    f"({scarcity:.0%}) | Species {species_count} | Track {track}",
+                    (220, 230, 240),
+                ),
+                (
+                    f"Alive {alive} | Births {births} | Deaths {deaths}",
+                    (170, 200, 180),
+                ),
+            ]
+            if drought > 0:
+                lines.append(
+                    (f"Drought! Clouds paused — {drought} steps left", (255, 190, 90))
+                )
+            for entry in feed:
+                lines.append((f"• {entry}", (150, 165, 180)))
+            rendered = [self.font.render(text, True, color) for text, color in lines]
+            width = max(text.get_width() for text in rendered) + 16
+            height = sum(text.get_height() for text in rendered) + 8 * (
+                len(rendered) + 1
             )
-            self._hud_surface = self.font.render(text, True, (220, 230, 240))
+            hud = pygame.Surface((width, height), pygame.SRCALPHA)
+            hud.fill((0, 0, 0, 140))
+            y = 8
+            for text in rendered:
+                hud.blit(text, (8, y))
+                y += text.get_height() + 8
+            self._hud_surface = hud
             self._hud_key = hud_key
-        bg = pygame.Surface(
-            (self._hud_surface.get_width() + 16, self._hud_surface.get_height() + 8),
-            pygame.SRCALPHA,
-        )
-        bg.fill((0, 0, 0, 140))
-        surface.blit(bg, (8, 8))
-        surface.blit(self._hud_surface, (16, 12))
+        surface.blit(self._hud_surface, (8, 8))
 
     def _draw_minimap(self, surface, organisms, food_items, clouds):
         """Draw world overview with viewport indicator in the top-right."""
@@ -358,16 +501,25 @@ class LivingWorldRenderer(RendererCommon):
             max(4, int((vy1 - vy0) * scale_y)),
         )
         pygame.draw.rect(surface, (255, 220, 80), mini_rect, 2)
-        label = self.font.render("Map", True, (180, 190, 200))
-        surface.blit(label, (rect.x + 6, rect.y + 4))
+        if self._minimap_label is None:
+            self._minimap_label = self.font.render("Map", True, (180, 190, 200))
+        surface.blit(self._minimap_label, (rect.x + 6, rect.y + 4))
 
     def _draw_organism_panel(self, surface, organism):
         """Draw stats and genome graph for the selected organism."""
         panel_w, panel_h = 300, 380
         panel = pygame.Rect(12, self.viewport_height - panel_h - 12, panel_w, panel_h)
-        panel_surface = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        panel_surface.fill((20, 24, 32, 230))
-        pygame.draw.rect(panel_surface, (90, 110, 130), panel_surface.get_rect(), 1, 8)
+        if self._panel_surface is None:
+            self._panel_surface = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+            self._panel_bg = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+            self._panel_bg.fill((20, 24, 32, 230))
+            pygame.draw.rect(
+                self._panel_bg, (90, 110, 130), self._panel_bg.get_rect(), 1, 8
+            )
+        panel_surface = self._panel_surface
+        # Clear the previous frame's text before reusing the surface.
+        panel_surface.fill((0, 0, 0, 0))
+        panel_surface.blit(self._panel_bg, (0, 0))
         diet = "Carnivore" if organism.is_carnivore else "Herbivore"
         genes = getattr(organism, "body_genes", None)
         if genes is not None:
@@ -391,16 +543,29 @@ class LivingWorldRenderer(RendererCommon):
             text = font.render(line, True, color)
             panel_surface.blit(text, (14, y))
             y += 28 if index == 0 else 22
-        genome_surface = build_genome_surface(
-            organism.genome,
-            organism.config,
-            width=panel_w - 28,
-            height=130,
-            font=self.font,
-        )
+        # A genome never changes during its owner's life, so the graph
+        # surface is cached per genome object (capped; cleared when full).
+        genome = organism.genome
+        genome_surface = self._genome_surfaces.get(genome)
+        if genome_surface is None:
+            genome_surface = build_genome_surface(
+                genome,
+                organism.config,
+                width=panel_w - 28,
+                height=130,
+                font=self.font,
+            )
+            if len(self._genome_surfaces) > 32:
+                self._genome_surfaces.clear()
+            self._genome_surfaces[genome] = genome_surface
         panel_surface.blit(genome_surface, (14, y + 4))
-        hint = self.font.render("Drag to pan | T track | Esc clear", True, (120, 130, 140))
-        panel_surface.blit(hint, (14, panel_h - 24))
+        if self._hint_surface is None:
+            self._hint_surface = self.font.render(
+                "Drag to pan | Wheel zoom | Right-click food | F burst | D drought | T track | Esc clear",
+                True,
+                (120, 130, 140),
+            )
+        panel_surface.blit(self._hint_surface, (14, panel_h - 24))
         surface.blit(panel_surface, panel.topleft)
 
     def _on_screen(self, sx, sy, margin):

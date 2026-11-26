@@ -1,7 +1,6 @@
 """Shared renderer helpers: species colors and scoreboard surface building."""
 
 import colorsys
-import os
 import random
 
 import pygame
@@ -20,6 +19,9 @@ class RendererCommon:
         # Cached pygame text/sprite surfaces.
         self.species_surfaces = {}
         self.text_surfaces = {}
+        # Rasterized scoreboard surface, rebuilt only when its records change.
+        self._scoreboard_surface = None
+        self._scoreboard_key = None
         self.last_cache_clear = 0
         # Click-selected organism and sense-ring overlay toggle (S key).
         self.selected_organism = None
@@ -28,29 +30,29 @@ class RendererCommon:
         self._init_fonts()
 
     def _init_fonts(self):
-        """Load project fonts or fall back to pygame defaults."""
+        """Use pygame's bundled default font explicitly.
+
+        The repo ships no assets/fonts (Roboto was loaded from there and
+        silently fell back every run), so there is nothing to load.
+        """
         pygame.font.init()
-        font_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts")
-        try:
-            self.title_font = pygame.font.Font(
-                os.path.join(font_dir, "Roboto-Bold.ttf"), 36
-            )
-            self.header_font = pygame.font.Font(
-                os.path.join(font_dir, "Roboto-Medium.ttf"), 28
-            )
-            self.font = pygame.font.Font(
-                os.path.join(font_dir, "Roboto-Regular.ttf"), 20
-            )
-        except (FileNotFoundError, OSError):
-            self.title_font = pygame.font.Font(None, 36)
-            self.header_font = pygame.font.Font(None, 28)
-            self.font = pygame.font.Font(None, 20)
+        self.title_font = pygame.font.Font(None, 36)
+        self.header_font = pygame.font.Font(None, 28)
+        self.font = pygame.font.Font(None, 20)
         self.colors = {
             "background": (255, 255, 255),
             "food": (0, 255, 0),
             "text": (0, 0, 0),
             "card": (240, 240, 240),
             "border": (200, 200, 200),
+        }
+        # Scoreboard palette: dark, to match the dark living-world viewport
+        # instead of the white episodic arena the old colors assumed.
+        self.scoreboard_colors = {
+            "background": (18, 22, 28),
+            "text": (220, 230, 240),
+            "card": (30, 36, 44),
+            "border": (90, 110, 130),
         }
 
     def get_species_color(self, species_id, is_carnivore):
@@ -104,9 +106,14 @@ class RendererCommon:
         )
 
     def draw_breeding_zone(self, surface, arena_width, arena_height):
-        """Draw the inner breeding safe zone border and label."""
-        breeding_boundary_x = arena_width * 0.1
-        breeding_boundary_y = arena_height * 0.1
+        """Draw the inner breeding safe zone border and label.
+
+        The box is the 2% edge margin can_breed actually enforces: breeding
+        is allowed only inside it. (It used to draw a 10% inset, which
+        understated where breeding is allowed.)
+        """
+        breeding_boundary_x = arena_width * 0.02
+        breeding_boundary_y = arena_height * 0.02
         breeding_width = arena_width - (breeding_boundary_x * 2)
         breeding_height = arena_height - (breeding_boundary_y * 2)
         breeding_rect = pygame.Rect(
@@ -115,14 +122,14 @@ class RendererCommon:
             breeding_width,
             breeding_height,
         )
-        pygame.draw.rect(surface, (240, 250, 240), breeding_rect, 1)
+        pygame.draw.rect(surface, (100, 180, 100), breeding_rect, 1)
         if "breeding_zone_text" not in self.text_surfaces:
             self.text_surfaces["breeding_zone_text"] = self.font.render(
                 "Breeding Safe Zone", True, (100, 180, 100)
             )
         surface.blit(
             self.text_surfaces["breeding_zone_text"],
-            (breeding_boundary_x + 5, breeding_boundary_y - 25),
+            (breeding_boundary_x + 5, breeding_boundary_y + 5),
         )
 
     def organism_sprite_cache_key(self, species_id, is_carnivore, radius, num_spikes, spike_length):
@@ -222,18 +229,41 @@ class RendererCommon:
         self.species_colors.clear()
 
     def build_scoreboard_surface(self, scoreboard_height):
-        """Rasterize the scoreboard panel to an RGBA pygame surface."""
+        """Rasterize the scoreboard panel to an RGBA pygame surface.
+
+        The rasterized surface is cached and rebuilt only when the records
+        it shows change; the living-world view calls this every frame.
+        """
         from scoreboard import Scoreboard
 
+        top_species = Scoreboard.get_top_species(10)
+        key = (
+            scoreboard_height,
+            tuple(
+                (
+                    species_id,
+                    record.get("scientific_name"),
+                    record.get("size"),
+                    record.get("num_spikes"),
+                    record.get("spike_length"),
+                    record.get("is_carnivore"),
+                    int(record.get("highest_fitness", 0)),
+                    record.get("first_seen"),
+                    record.get("last_seen"),
+                )
+                for species_id, record in top_species[:8]
+            ),
+        )
+        if self._scoreboard_key == key and self._scoreboard_surface is not None:
+            return self._scoreboard_surface
         surface = pygame.Surface(
             (self.scoreboard_width, scoreboard_height), pygame.SRCALPHA
         )
-        surface.fill(self.colors["background"])
-        top_species = Scoreboard.get_top_species(10)
+        surface.fill(self.scoreboard_colors["background"])
         if not top_species:
             if "waiting" not in self.text_surfaces:
                 self.text_surfaces["waiting"] = self.font.render(
-                    "Waiting for species data...", True, self.colors["text"]
+                    "Waiting for species data...", True, self.scoreboard_colors["text"]
                 )
             text = self.text_surfaces["waiting"]
             text_pos = text.get_rect(
@@ -241,11 +271,13 @@ class RendererCommon:
                 centery=scoreboard_height // 2,
             )
             surface.blit(text, text_pos)
+            self._scoreboard_surface = surface
+            self._scoreboard_key = key
             return surface
 
         if "header" not in self.text_surfaces:
             self.text_surfaces["header"] = self.header_font.render(
-                "Top Species", True, self.colors["text"]
+                "Top Species", True, self.scoreboard_colors["text"]
             )
         surface.blit(self.text_surfaces["header"], (20, 5))
 
@@ -253,9 +285,9 @@ class RendererCommon:
         for species_id, record in top_species[:8]:
             card_height = 90
             card_rect = pygame.Rect(10, y_offset, self.scoreboard_width - 20, card_height)
-            pygame.draw.rect(surface, self.colors["card"], card_rect, border_radius=5)
+            pygame.draw.rect(surface, self.scoreboard_colors["card"], card_rect, border_radius=5)
             pygame.draw.rect(
-                surface, self.colors["border"], card_rect, width=1, border_radius=5
+                surface, self.scoreboard_colors["border"], card_rect, width=1, border_radius=5
             )
             radius = record.get("size", 12) / 2
             num_spikes = record.get("num_spikes", 3)
@@ -287,7 +319,7 @@ class RendererCommon:
             text_key = f"fitness_{fitness_text}"
             if text_key not in self.text_surfaces:
                 self.text_surfaces[text_key] = self.font.render(
-                    fitness_text, True, self.colors["text"]
+                    fitness_text, True, self.scoreboard_colors["text"]
                 )
             surface.blit(
                 self.text_surfaces[text_key], (card_rect.x + 50, card_rect.y + 40)
@@ -297,7 +329,7 @@ class RendererCommon:
             text_key = f"gen_{gen_text}"
             if text_key not in self.text_surfaces:
                 self.text_surfaces[text_key] = self.font.render(
-                    gen_text, True, self.colors["text"]
+                    gen_text, True, self.scoreboard_colors["text"]
                 )
             surface.blit(
                 self.text_surfaces[text_key], (card_rect.x + 50, card_rect.y + 65)
@@ -307,10 +339,12 @@ class RendererCommon:
         if len(self.text_surfaces) > 100:
             essential_keys = ["header", "waiting"]
             self.text_surfaces = {
-                key: value
-                for key, value in self.text_surfaces.items()
-                if key in essential_keys
+                text_key: value
+                for text_key, value in self.text_surfaces.items()
+                if text_key in essential_keys
             }
+        self._scoreboard_surface = surface
+        self._scoreboard_key = key
         return surface
 
     def get_species_visual(

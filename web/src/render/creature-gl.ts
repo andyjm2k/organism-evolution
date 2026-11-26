@@ -18,6 +18,7 @@ layout(location=7) in vec4 i_mat;
 layout(location=8) in float i_mark;
 uniform vec2 u_view;
 uniform vec2 u_camera;
+uniform float u_zoom;
 uniform float u_time;
 out vec3 v_color;
 out vec3 v_nrm;
@@ -41,7 +42,7 @@ void main() {
   shaped.y += wave * shaped.x * shaped.x;
   vec3 local = yawed(pitched(shaped * i_scale, i_orient.y), i_orient.x);
   vec3 world = i_origin + local;
-  vec2 screen = world.xy - u_camera;
+  vec2 screen = (world.xy - u_camera) * u_zoom;
   vec2 ndc = (screen / u_view) * 2.0 - 1.0;
   ndc.y = -ndc.y;
   gl_Position = vec4(ndc, 0.84 - world.z * 0.01, 1.0);
@@ -134,7 +135,7 @@ export class CreaturePass {
   draw(
     bodies: BodySnapshot[],
     selectedId: number | null,
-    camera: { offsetX: number; offsetY: number; worldToScreen(x: number, y: number): [number, number] },
+    camera: { offsetX: number; offsetY: number; zoom?: number; worldToScreen(x: number, y: number): [number, number] },
     width: number,
     height: number,
     time: number,
@@ -191,6 +192,7 @@ export class CreaturePass {
     gl.useProgram(this.program);
     gl.uniform2f(gl.getUniformLocation(this.program, "u_view"), width, height);
     gl.uniform2f(gl.getUniformLocation(this.program, "u_camera"), camera.offsetX, camera.offsetY);
+    gl.uniform1f(gl.getUniformLocation(this.program, "u_zoom"), camera.zoom ?? 1);
     gl.uniform1f(gl.getUniformLocation(this.program, "u_time"), time);
     gl.enable(gl.DEPTH_TEST);
     gl.depthMask(true);

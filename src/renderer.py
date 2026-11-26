@@ -5,6 +5,7 @@ import math
 import pygame
 
 from logging_util import log_detailed
+from plant_strain import pellet_color
 from renderer_common import RendererCommon
 
 
@@ -42,7 +43,7 @@ class PygameRenderer(RendererCommon):
             for food in food_items[:render_limit]:
                 if food.position is not None:
                     pos = (int(food.position[0]), int(food.position[1]))
-                    pygame.draw.circle(self.screen, (0, 255, 0), pos, 4)
+                    pygame.draw.circle(self.screen, pellet_color(food), pos, 4)
 
         if organisms:
             self.draw_movement_trails(self.screen, organisms[:render_limit])
