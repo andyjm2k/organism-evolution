@@ -43,6 +43,16 @@ class LivingWorldRenderer(RendererCommon):
         self._hud_key = None
         self._hud_surface = None
         self._panel_surfaces = {}
+        # Per-frame surface caches (item 12): rebuilt only when their
+        # inputs change, instead of allocating a fresh surface each frame.
+        self._viewport_surface = None
+        self._cloud_surfaces = {}
+        self._ring_surfaces = {}
+        self._panel_surface = None
+        self._panel_bg = None
+        self._genome_surfaces = {}
+        self._minimap_label = None
+        self._hint_surface = None
         # Food ecology for god controls (right-click / F food burst, D drought).
         # Set by the simulation via set_food_ecology; None keeps input inert.
         self._food_ecology = None
@@ -167,7 +177,15 @@ class LivingWorldRenderer(RendererCommon):
         ):
             self.camera.set_track_target(self.selected_organism.position)
 
-        viewport = pygame.Surface((self.viewport_width, self.viewport_height))
+        if (
+            self._viewport_surface is None
+            or self._viewport_surface.get_size()
+            != (self.viewport_width, self.viewport_height)
+        ):
+            self._viewport_surface = pygame.Surface(
+                (self.viewport_width, self.viewport_height)
+            )
+        viewport = self._viewport_surface
         viewport.fill((18, 22, 28))
         self._draw_nutrient_clouds(viewport, nutrient_clouds)
         self._draw_food(viewport, food_items)
@@ -252,16 +270,22 @@ class LivingWorldRenderer(RendererCommon):
         for cloud in clouds:
             sx, sy = self._world_to_viewport(cloud.position[0], cloud.position[1])
             radius = int(cloud.radius * self.camera.zoom)
-            if not self._on_screen(sx, sy, radius):
+            if radius <= 0 or not self._on_screen(sx, sy, radius):
                 continue
             alpha = int(40 + 60 * cloud.intensity)
-            cloud_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-            color = (60, 200, 90, alpha)
-            pygame.draw.circle(cloud_surface, color, (radius, radius), radius)
-            inner = (120, 240, 140, alpha // 2)
-            pygame.draw.circle(
-                cloud_surface, inner, (radius, radius), int(radius * 0.55)
-            )
+            cache_key = (radius, alpha)
+            cloud_surface = self._cloud_surfaces.get(cache_key)
+            if cloud_surface is None:
+                cloud_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+                color = (60, 200, 90, alpha)
+                pygame.draw.circle(cloud_surface, color, (radius, radius), radius)
+                inner = (120, 240, 140, alpha // 2)
+                pygame.draw.circle(
+                    cloud_surface, inner, (radius, radius), int(radius * 0.55)
+                )
+                if len(self._cloud_surfaces) > 128:
+                    self._cloud_surfaces.clear()
+                self._cloud_surfaces[cache_key] = cloud_surface
             surface.blit(cloud_surface, (sx - radius, sy - radius))
 
     def _draw_food(self, surface, food_items):
@@ -325,8 +349,16 @@ class LivingWorldRenderer(RendererCommon):
             if radius <= 0:
                 continue
             radius = int(radius * self.camera.zoom)
-            ring = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(ring, color, (radius, radius), int(radius), 1)
+            if radius <= 0:
+                continue
+            cache_key = (radius, color)
+            ring = self._ring_surfaces.get(cache_key)
+            if ring is None:
+                ring = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+                pygame.draw.circle(ring, color, (radius, radius), radius, 1)
+                if len(self._ring_surfaces) > 64:
+                    self._ring_surfaces.clear()
+                self._ring_surfaces[cache_key] = ring
             surface.blit(ring, (sx - radius, sy - radius))
 
     def _organism_color(self, organism):
@@ -469,16 +501,25 @@ class LivingWorldRenderer(RendererCommon):
             max(4, int((vy1 - vy0) * scale_y)),
         )
         pygame.draw.rect(surface, (255, 220, 80), mini_rect, 2)
-        label = self.font.render("Map", True, (180, 190, 200))
-        surface.blit(label, (rect.x + 6, rect.y + 4))
+        if self._minimap_label is None:
+            self._minimap_label = self.font.render("Map", True, (180, 190, 200))
+        surface.blit(self._minimap_label, (rect.x + 6, rect.y + 4))
 
     def _draw_organism_panel(self, surface, organism):
         """Draw stats and genome graph for the selected organism."""
         panel_w, panel_h = 300, 380
         panel = pygame.Rect(12, self.viewport_height - panel_h - 12, panel_w, panel_h)
-        panel_surface = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        panel_surface.fill((20, 24, 32, 230))
-        pygame.draw.rect(panel_surface, (90, 110, 130), panel_surface.get_rect(), 1, 8)
+        if self._panel_surface is None:
+            self._panel_surface = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+            self._panel_bg = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+            self._panel_bg.fill((20, 24, 32, 230))
+            pygame.draw.rect(
+                self._panel_bg, (90, 110, 130), self._panel_bg.get_rect(), 1, 8
+            )
+        panel_surface = self._panel_surface
+        # Clear the previous frame's text before reusing the surface.
+        panel_surface.fill((0, 0, 0, 0))
+        panel_surface.blit(self._panel_bg, (0, 0))
         diet = "Carnivore" if organism.is_carnivore else "Herbivore"
         genes = getattr(organism, "body_genes", None)
         if genes is not None:
@@ -502,20 +543,29 @@ class LivingWorldRenderer(RendererCommon):
             text = font.render(line, True, color)
             panel_surface.blit(text, (14, y))
             y += 28 if index == 0 else 22
-        genome_surface = build_genome_surface(
-            organism.genome,
-            organism.config,
-            width=panel_w - 28,
-            height=130,
-            font=self.font,
-        )
+        # A genome never changes during its owner's life, so the graph
+        # surface is cached per genome object (capped; cleared when full).
+        genome = organism.genome
+        genome_surface = self._genome_surfaces.get(genome)
+        if genome_surface is None:
+            genome_surface = build_genome_surface(
+                genome,
+                organism.config,
+                width=panel_w - 28,
+                height=130,
+                font=self.font,
+            )
+            if len(self._genome_surfaces) > 32:
+                self._genome_surfaces.clear()
+            self._genome_surfaces[genome] = genome_surface
         panel_surface.blit(genome_surface, (14, y + 4))
-        hint = self.font.render(
-            "Drag to pan | Wheel zoom | Right-click food | F burst | D drought | T track | Esc clear",
-            True,
-            (120, 130, 140),
-        )
-        panel_surface.blit(hint, (14, panel_h - 24))
+        if self._hint_surface is None:
+            self._hint_surface = self.font.render(
+                "Drag to pan | Wheel zoom | Right-click food | F burst | D drought | T track | Esc clear",
+                True,
+                (120, 130, 140),
+            )
+        panel_surface.blit(self._hint_surface, (14, panel_h - 24))
         surface.blit(panel_surface, panel.topleft)
 
     def _on_screen(self, sx, sy, margin):

@@ -19,6 +19,9 @@ class RendererCommon:
         # Cached pygame text/sprite surfaces.
         self.species_surfaces = {}
         self.text_surfaces = {}
+        # Rasterized scoreboard surface, rebuilt only when its records change.
+        self._scoreboard_surface = None
+        self._scoreboard_key = None
         self.last_cache_clear = 0
         # Click-selected organism and sense-ring overlay toggle (S key).
         self.selected_organism = None
@@ -226,14 +229,37 @@ class RendererCommon:
         self.species_colors.clear()
 
     def build_scoreboard_surface(self, scoreboard_height):
-        """Rasterize the scoreboard panel to an RGBA pygame surface."""
+        """Rasterize the scoreboard panel to an RGBA pygame surface.
+
+        The rasterized surface is cached and rebuilt only when the records
+        it shows change; the living-world view calls this every frame.
+        """
         from scoreboard import Scoreboard
 
+        top_species = Scoreboard.get_top_species(10)
+        key = (
+            scoreboard_height,
+            tuple(
+                (
+                    species_id,
+                    record.get("scientific_name"),
+                    record.get("size"),
+                    record.get("num_spikes"),
+                    record.get("spike_length"),
+                    record.get("is_carnivore"),
+                    int(record.get("highest_fitness", 0)),
+                    record.get("first_seen"),
+                    record.get("last_seen"),
+                )
+                for species_id, record in top_species[:8]
+            ),
+        )
+        if self._scoreboard_key == key and self._scoreboard_surface is not None:
+            return self._scoreboard_surface
         surface = pygame.Surface(
             (self.scoreboard_width, scoreboard_height), pygame.SRCALPHA
         )
         surface.fill(self.scoreboard_colors["background"])
-        top_species = Scoreboard.get_top_species(10)
         if not top_species:
             if "waiting" not in self.text_surfaces:
                 self.text_surfaces["waiting"] = self.font.render(
@@ -245,6 +271,8 @@ class RendererCommon:
                 centery=scoreboard_height // 2,
             )
             surface.blit(text, text_pos)
+            self._scoreboard_surface = surface
+            self._scoreboard_key = key
             return surface
 
         if "header" not in self.text_surfaces:
@@ -311,10 +339,12 @@ class RendererCommon:
         if len(self.text_surfaces) > 100:
             essential_keys = ["header", "waiting"]
             self.text_surfaces = {
-                key: value
-                for key, value in self.text_surfaces.items()
-                if key in essential_keys
+                text_key: value
+                for text_key, value in self.text_surfaces.items()
+                if text_key in essential_keys
             }
+        self._scoreboard_surface = surface
+        self._scoreboard_key = key
         return surface
 
     def get_species_visual(

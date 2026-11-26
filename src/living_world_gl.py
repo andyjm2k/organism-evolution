@@ -85,6 +85,9 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
     def __init__(self, sim_config, logging_level="normal"):
         super().__init__(sim_config, logging_level=logging_level)
         pygame.display.set_caption("Living World Evolution (GPU)")
+        # Reused overlay surfaces (item 12): redrawn, not reallocated.
+        self._world_overlay_surface = None
+        self._ui_overlay_surface = None
         self.ctx = moderngl.create_context()
         self._circle_prog = self.ctx.program(
             vertex_shader=_CIRCLE_VERTEX_SHADER,
@@ -153,9 +156,15 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
 
     def _draw_world_overlay(self, organisms, nutrient_clouds):
         """Clouds and trails stay on a pygame surface behind the instances."""
-        overlay = pygame.Surface(
-            (self.viewport_width, self.viewport_height), pygame.SRCALPHA
-        )
+        if (
+            self._world_overlay_surface is None
+            or self._world_overlay_surface.get_size()
+            != (self.viewport_width, self.viewport_height)
+        ):
+            self._world_overlay_surface = pygame.Surface(
+                (self.viewport_width, self.viewport_height), pygame.SRCALPHA
+            )
+        overlay = self._world_overlay_surface
         overlay.fill((18, 22, 28, 255))
         self._draw_nutrient_clouds(overlay, nutrient_clouds)
         if organisms:
@@ -216,9 +225,17 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
 
     def _draw_ui_overlay(self, organisms, food_items, nutrient_clouds, food_ecology):
         """Bodies with organs, then HUD, minimap, and the tracked inspection panel."""
-        ui = pygame.Surface(
-            (self.viewport_width, self.viewport_height), pygame.SRCALPHA
-        )
+        if (
+            self._ui_overlay_surface is None
+            or self._ui_overlay_surface.get_size()
+            != (self.viewport_width, self.viewport_height)
+        ):
+            self._ui_overlay_surface = pygame.Surface(
+                (self.viewport_width, self.viewport_height), pygame.SRCALPHA
+            )
+        ui = self._ui_overlay_surface
+        # The overlay is reused: clear last frame's bodies and text first.
+        ui.fill((0, 0, 0, 0))
         # Same body routine as the pygame renderer: color, size, jaw, horn, claw, flagella.
         for organism in organisms:
             self._draw_organism(ui, organism)
@@ -238,7 +255,10 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
 
     def _blit_surface(self, name, surface, x, y):
         """Upload one pygame surface and draw it in screen pixels."""
-        surface = surface.convert_alpha()
+        # The overlays are already per-pixel alpha; converting them again
+        # would copy a full frame-sized surface on every frame.
+        if not (surface.get_flags() & pygame.SRCALPHA):
+            surface = surface.convert_alpha()
         width, height = surface.get_size()
         texture = self._textures.get(name)
         if texture is None or texture.size != (width, height):
