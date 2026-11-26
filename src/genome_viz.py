@@ -6,7 +6,8 @@ import pygame
 def build_genome_surface(genome, config, width=260, height=180, font=None):
     """Rasterize genome nodes and connections to a pygame surface."""
     surface = pygame.Surface((width, height), pygame.SRCALPHA)
-    surface.fill((248, 250, 252, 240))
+    # Dark surface to match the dark inspection panel it sits in.
+    surface.fill((20, 24, 32, 240))
     if genome is None or config is None:
         return surface
     num_inputs = config.genome_config.num_inputs
@@ -64,10 +65,10 @@ def build_genome_surface(genome, config, width=260, height=180, font=None):
         label = font.render(
             f"{len(genome.nodes)}n {len(genome.connections)}c",
             True,
-            (60, 60, 60),
+            (180, 190, 200),
         )
         surface.blit(label, (8, height - 22))
-    pygame.draw.rect(surface, (200, 205, 210), surface.get_rect(), 1, border_radius=6)
+    pygame.draw.rect(surface, (90, 110, 130), surface.get_rect(), 1, border_radius=6)
     return surface
 
 

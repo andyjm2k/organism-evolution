@@ -64,7 +64,9 @@ class TestRendererCommon(unittest.TestCase):
         surface = pygame.Surface((400, 400), pygame.SRCALPHA)
         self.common.draw_breeding_zone(surface, 400, 400)
         self.assertIn("breeding_zone_text", self.common.text_surfaces)
-        self.assertGreater(surface.get_at((40, 40))[3], 0)
+        # The border is the 2% breeding margin can_breed enforces (8px on
+        # a 400px arena), so the left edge passes through (8, 200).
+        self.assertGreater(surface.get_at((8, 200))[3], 0)
 
     def test_count_active_species_ignores_dead_organisms(self):
         """Active species count should include only living organisms."""
