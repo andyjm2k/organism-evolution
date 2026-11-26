@@ -198,6 +198,7 @@ export class WorldView {
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
     gl.uniform2f(gl.getUniformLocation(program, "u_view"), width, height);
     gl.uniform2f(gl.getUniformLocation(program, "u_camera"), camera.offsetX, camera.offsetY);
+    gl.uniform1f(gl.getUniformLocation(program, "u_zoom"), camera.zoom);
     if (data.length === 0) {
       return;
     }
@@ -220,11 +221,11 @@ function drawScene(
     const alpha = (40 + 60 * cloud.intensity) / 255;
     ctx.beginPath();
     ctx.fillStyle = `rgba(60,200,90,${alpha})`;
-    ctx.arc(sx, sy, cloud.radius, 0, Math.PI * 2);
+    ctx.arc(sx, sy, cloud.radius * camera.zoom, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
     ctx.fillStyle = `rgba(120,240,140,${alpha / 2})`;
-    ctx.arc(sx, sy, cloud.radius * 0.55, 0, Math.PI * 2);
+    ctx.arc(sx, sy, cloud.radius * 0.55 * camera.zoom, 0, Math.PI * 2);
     ctx.fill();
   }
   for (const food of snapshot.foods) {
@@ -234,7 +235,7 @@ function drawScene(
     }
     ctx.beginPath();
     ctx.fillStyle = `rgb(${food.color[0]},${food.color[1]},${food.color[2]})`;
-    ctx.arc(sx, sy, food.regrowing ? 2 : 3, 0, Math.PI * 2);
+    ctx.arc(sx, sy, Math.max(1, (food.regrowing ? 2 : 3) * camera.zoom), 0, Math.PI * 2);
     ctx.fill();
   }
   drawOrgansAndChrome(ctx, snapshot, camera, width, height, options, true);
@@ -259,7 +260,7 @@ function drawOrgansAndChrome(
       ctx.fillStyle = "rgb(245,236,214)";
       ctx.strokeStyle = "rgb(90,70,40)";
       ctx.lineWidth = 1;
-      ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+      ctx.arc(sx, sy, Math.max(1, 6 * camera.zoom), 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
@@ -274,13 +275,13 @@ function drawOrgansAndChrome(
       continue;
     }
     if (flatBodies) {
-      drawBody(ctx, sx, sy, body);
+      drawBody(ctx, sx, sy, body, camera);
     }
     if (options && body.id === options.selectedId) {
       ctx.beginPath();
       ctx.strokeStyle = "rgb(255,210,60)";
       ctx.lineWidth = 2;
-      ctx.arc(sx, sy, visualRadius(body.radius) * 1.85, 0, Math.PI * 2);
+      ctx.arc(sx, sy, visualRadius(body.radius) * 1.85 * camera.zoom, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
@@ -319,12 +320,12 @@ function drawRings(ctx: CanvasRenderingContext2D, body: BodySnapshot, camera: Ca
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
-    ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+    ctx.arc(sx, sy, radius * camera.zoom, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
 
-function drawBody(ctx: CanvasRenderingContext2D, x: number, y: number, body: BodySnapshot): void {
+function drawBody(ctx: CanvasRenderingContext2D, x: number, y: number, body: BodySnapshot, camera: Camera): void {
   const pose: CreaturePose = {
     color: body.color,
     parts: body.parts,
@@ -334,7 +335,7 @@ function drawBody(ctx: CanvasRenderingContext2D, x: number, y: number, body: Bod
     flagella: body.flagella,
     selected: false,
   };
-  paintCreature2d(ctx, x, y, visualRadius(body.radius), body.heading, pose);
+  paintCreature2d(ctx, x, y, visualRadius(body.radius) * camera.zoom, body.heading, pose);
 }
 
 export function minimapRect(width: number): { x: number; y: number; size: number } {
@@ -385,11 +386,12 @@ layout(location=3) in vec3 a_color;
 layout(location=4) in float a_alpha;
 uniform vec2 u_view;
 uniform vec2 u_camera;
+uniform float u_zoom;
 out vec3 v_color;
 out float v_alpha;
 out vec2 v_local;
 void main() {
-  vec2 screen = (a_center - u_camera) + a_corner * a_radius;
+  vec2 screen = (a_center - u_camera) * u_zoom + a_corner * a_radius * u_zoom;
   vec2 ndc = (screen / u_view) * 2.0 - 1.0;
   ndc.y = -ndc.y;
   gl_Position = vec4(ndc, 0.0, 1.0);

@@ -89,7 +89,10 @@ class LivingWorldRenderer(RendererCommon):
         """Process mouse events for pan, select, track, and god controls."""
         if event.type == pygame.MOUSEBUTTONDOWN:
             pos = event.pos
-            if (
+            if event.button in (4, 5) and self._in_viewport(pos):
+                # Legacy wheel buttons (some drivers still emit them).
+                self.camera.zoom_at(pos[0], pos[1], 1 if event.button == 4 else -1)
+            elif (
                 event.button == 3
                 and self._in_viewport(pos)
                 and not self._point_in_minimap(pos)
@@ -112,6 +115,13 @@ class LivingWorldRenderer(RendererCommon):
             self.camera.end_drag()
         elif event.type == pygame.MOUSEMOTION and self.camera.is_dragging():
             self.camera.drag_to(event.pos)
+        elif event.type == pygame.MOUSEWHEEL:
+            pos = getattr(event, "pos", None) or (
+                self.viewport_width // 2,
+                self.viewport_height // 2,
+            )
+            if self._in_viewport(pos):
+                self.camera.zoom_at(pos[0], pos[1], event.y)
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_s:
                 self.toggle_sense_rings()
@@ -241,9 +251,9 @@ class LivingWorldRenderer(RendererCommon):
         """Draw semi-transparent nutrient cloud fields."""
         for cloud in clouds:
             sx, sy = self._world_to_viewport(cloud.position[0], cloud.position[1])
-            if not self._on_screen(sx, sy, cloud.radius):
+            radius = int(cloud.radius * self.camera.zoom)
+            if not self._on_screen(sx, sy, radius):
                 continue
-            radius = int(cloud.radius)
             alpha = int(40 + 60 * cloud.intensity)
             cloud_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
             color = (60, 200, 90, alpha)
@@ -263,13 +273,17 @@ class LivingWorldRenderer(RendererCommon):
             if self._on_screen(sx, sy, 6):
                 color = pellet_color(food)
                 radius = 2 if getattr(food, "regrow_in", 0) > 0 else 3
-                pygame.draw.circle(surface, color, (sx, sy), radius)
+                pygame.draw.circle(
+                    surface, color, (sx, sy), max(1, int(radius * self.camera.zoom))
+                )
         for egg in getattr(self, "_eggs_to_draw", ()):
             if getattr(egg, "position", None) is None:
                 continue
             sx, sy = self._world_to_viewport(egg.position[0], egg.position[1])
             if self._on_screen(sx, sy, 8):
-                pygame.draw.circle(surface, (230, 210, 160), (sx, sy), 4)
+                pygame.draw.circle(
+                    surface, (230, 210, 160), (sx, sy), max(1, int(4 * self.camera.zoom))
+                )
 
     def _draw_trails(self, surface, organisms):
         """Draw movement trails with camera offset applied."""
@@ -310,6 +324,7 @@ class LivingWorldRenderer(RendererCommon):
         for radius, color in rings:
             if radius <= 0:
                 continue
+            radius = int(radius * self.camera.zoom)
             ring = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
             pygame.draw.circle(ring, color, (radius, radius), int(radius), 1)
             surface.blit(ring, (sx - radius, sy - radius))
@@ -327,13 +342,22 @@ class LivingWorldRenderer(RendererCommon):
         if organism.position is None or organism.energy <= 0:
             return
         sx, sy = self._world_to_viewport(organism.position[0], organism.position[1])
-        if not self._on_screen(sx, sy, 30):
+        body_radius = organism.get_radius() * self.camera.zoom
+        if not self._on_screen(sx, sy, int(body_radius) + 10):
             return
         # Each body is drawn from its own genome, so jaws and horns are not
         # shared across a species that has already started to diverge.
         traits = BodyTraits.from_organism(organism)
         color = self._organism_color(organism)
-        draw_body(surface, sx, sy, color, organism.get_radius(), traits)
+        draw_body(
+            surface,
+            sx,
+            sy,
+            color,
+            body_radius,
+            traits,
+            heading=getattr(organism, "heading", 0.0),
+        )
 
     def _draw_selection(self, surface, organism):
         """Highlight the tracked organism."""
@@ -344,7 +368,7 @@ class LivingWorldRenderer(RendererCommon):
             surface,
             (255, 210, 60),
             (sx, sy),
-            int(organism.get_radius()) + 8,
+            int(organism.get_radius() * self.camera.zoom) + 8,
             2,
         )
 
@@ -487,7 +511,7 @@ class LivingWorldRenderer(RendererCommon):
         )
         panel_surface.blit(genome_surface, (14, y + 4))
         hint = self.font.render(
-            "Drag to pan | Right-click food | F burst | D drought | T track | Esc clear",
+            "Drag to pan | Wheel zoom | Right-click food | F burst | D drought | T track | Esc clear",
             True,
             (120, 130, 140),
         )

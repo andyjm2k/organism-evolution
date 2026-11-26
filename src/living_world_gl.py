@@ -20,12 +20,13 @@ in float in_radius;
 in vec3 in_color;
 uniform vec2 u_screen_size;
 uniform vec2 u_camera;
+uniform float u_zoom;
 out vec3 v_color;
 out vec2 v_local;
 void main() {
     // Radius has to be read here. Otherwise the linker drops the attribute
     // and the instanced buffer cannot be attached.
-    vec2 screen = (in_center - u_camera) + in_corner * in_radius;
+    vec2 screen = (in_center - u_camera) * u_zoom + in_corner * in_radius * u_zoom;
     vec2 ndc = (screen / u_screen_size) * 2.0 - 1.0;
     ndc.y = -ndc.y;
     gl_Position = vec4(ndc, 0.0, 1.0);
@@ -179,8 +180,8 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
     def _append_circle(self, instances, position, radius, color):
         """Add one circle if it overlaps the current viewport."""
         margin = radius + 8.0
-        sx = position[0] - self.camera.offset_x
-        sy = position[1] - self.camera.offset_y
+        sx = (position[0] - self.camera.offset_x) * self.camera.zoom
+        sy = (position[1] - self.camera.offset_y) * self.camera.zoom
         if sx < -margin or sy < -margin:
             return
         if sx > self.viewport_width + margin or sy > self.viewport_height + margin:
@@ -206,6 +207,7 @@ class LivingWorldGLRenderer(LivingWorldRenderer):
             float(self.camera.offset_x),
             float(self.camera.offset_y),
         )
+        self._circle_prog["u_zoom"].value = float(self.camera.zoom)
         data = struct.pack(f"{len(instances)}f", *instances)
         if self._instance_vbo.size < len(data):
             self._instance_vbo.orphan(size=len(data))
