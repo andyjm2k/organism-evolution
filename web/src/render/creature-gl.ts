@@ -135,7 +135,7 @@ export class CreaturePass {
   draw(
     bodies: BodySnapshot[],
     selectedId: number | null,
-    camera: { offsetX: number; offsetY: number; zoom: number; worldToScreen(x: number, y: number): [number, number] },
+    camera: { offsetX: number; offsetY: number; zoom?: number; worldToScreen(x: number, y: number): [number, number] },
     width: number,
     height: number,
     time: number,
@@ -192,7 +192,7 @@ export class CreaturePass {
     gl.useProgram(this.program);
     gl.uniform2f(gl.getUniformLocation(this.program, "u_view"), width, height);
     gl.uniform2f(gl.getUniformLocation(this.program, "u_camera"), camera.offsetX, camera.offsetY);
-    gl.uniform1f(gl.getUniformLocation(this.program, "u_zoom"), camera.zoom);
+    gl.uniform1f(gl.getUniformLocation(this.program, "u_zoom"), camera.zoom ?? 1);
     gl.uniform1f(gl.getUniformLocation(this.program, "u_time"), time);
     gl.enable(gl.DEPTH_TEST);
     gl.depthMask(true);
